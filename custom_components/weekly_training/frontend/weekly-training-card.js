@@ -448,7 +448,7 @@ class WeeklyTrainingCard extends HTMLElement {
       disabled: new Set(disabled.map((n) => String(n || "").trim()).filter(Boolean)),
       custom: custom.filter((e) => e && typeof e === "object"),
       query: "",
-      new_custom: { name: "", tags: "", equipment: "" },
+      new_custom: { name: "", group: "Core", tags: "", equipment: "" },
     };
     this._ui.showSettings = true;
     this._render();
@@ -816,7 +816,7 @@ class WeeklyTrainingCard extends HTMLElement {
     ` : "";
 
 	    const settingsModal = this._ui.showSettings ? (() => {
-      const draft = this._settingsDraft || { disabled: new Set(), custom: [], query: "", new_custom: { name: "", tags: "", equipment: "" } };
+	      const draft = this._settingsDraft || { disabled: new Set(), custom: [], query: "", new_custom: { name: "", group: "Core", tags: "", equipment: "" } };
       const exercises = Array.isArray(this._library) ? this._library : [];
       const grouped = this._groupExercisesForSettings(exercises);
 
@@ -881,20 +881,29 @@ class WeeklyTrainingCard extends HTMLElement {
                 </div>
               ` : `<div class="muted">No custom exercises yet.</div>`}
 
-              <div class="row compact" style="margin-top:10px">
-                <div>
-                  <div class="label">Name</div>
-                  <input data-focus-key="c_name" id="c-name" type="text" placeholder="e.g. Ring Row" value="${this._escape(String(draft.new_custom && draft.new_custom.name || ""))}" ${saving ? "disabled" : ""}/>
-                </div>
-                <div>
-                  <div class="label">Tags (CSV)</div>
-                  <input data-focus-key="c_tags" id="c-tags" type="text" placeholder="pull, row" value="${this._escape(String(draft.new_custom && draft.new_custom.tags || ""))}" ${saving ? "disabled" : ""}/>
-                </div>
-                <div>
-                  <div class="label">Equipment (CSV)</div>
-                  <input data-focus-key="c_eq" id="c-eq" type="text" placeholder="bodyweight, band" value="${this._escape(String(draft.new_custom && draft.new_custom.equipment || ""))}" ${saving ? "disabled" : ""}/>
-                </div>
-              </div>
+	              <div class="row compact" style="margin-top:10px">
+	                <div>
+	                  <div class="label">Name</div>
+	                  <input data-focus-key="c_name" id="c-name" type="text" placeholder="e.g. Ring Row" value="${this._escape(String(draft.new_custom && draft.new_custom.name || ""))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	                <div>
+	                  <div class="label">Category</div>
+	                  <select data-focus-key="c_group" id="c-group" ${saving ? "disabled" : ""}>
+	                    ${["Lower body", "Push", "Pull", "Shoulders", "Core", "Arms", "Other"].map((g) => {
+	                      const cur = String(draft.new_custom && draft.new_custom.group || "Core");
+	                      return `<option value="${this._escape(g)}" ${cur === g ? "selected" : ""}>${this._escape(g)}</option>`;
+	                    }).join("")}
+	                  </select>
+	                </div>
+	                <div>
+	                  <div class="label">Tags (CSV)</div>
+	                  <input data-focus-key="c_tags" id="c-tags" type="text" placeholder="pull, row" value="${this._escape(String(draft.new_custom && draft.new_custom.tags || ""))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	                <div>
+	                  <div class="label">Equipment (CSV)</div>
+	                  <input data-focus-key="c_eq" id="c-eq" type="text" placeholder="bodyweight, band" value="${this._escape(String(draft.new_custom && draft.new_custom.equipment || ""))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	              </div>
               <div class="actions" style="margin-top:10px">
                 <button id="c-add" ${saving ? "disabled" : ""}>Add custom exercise</button>
               </div>
@@ -946,17 +955,20 @@ class WeeklyTrainingCard extends HTMLElement {
 
 	    this.shadowRoot.innerHTML = `
 	      <style>
-	        :host {
-	          display:block;
-	          --accent: ${this._escape(accent)};
-	          --wt-radius: 16px;
-	          --wt-radius-sm: 12px;
-	          --wt-border: var(--divider-color);
-	          --wt-surface: var(--card-background-color);
-	          --wt-surface2: var(--secondary-background-color);
-	          --wt-text2: var(--secondary-text-color);
-	          --wt-accent: var(--accent, var(--primary-color));
-	        }
+		        :host {
+		          display:block;
+		          --accent: ${this._escape(accent)};
+		          --wt-radius: 16px;
+		          --wt-radius-sm: 12px;
+		          --wt-border: var(--divider-color);
+		          --wt-surface: var(--card-background-color);
+		          --wt-surface2: var(--card-background-color);
+		          /* Theme-native "subtle" surface derived from text color (avoids big gray blocks). */
+		          --wt-subtle: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.04);
+		          --wt-subtle2: rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.06);
+		          --wt-text2: var(--secondary-text-color);
+		          --wt-accent: var(--accent, var(--primary-color));
+		        }
 	        ha-card {
 	          overflow: hidden;
 	          width: 100%;
@@ -972,7 +984,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	        .weekpill {
 	          border: 1px solid var(--wt-border);
 	          border-radius: var(--wt-radius-sm);
-	          background: var(--wt-surface2);
+	          background: var(--wt-surface);
 	          padding: 10px 12px;
 	          min-width: 190px;
 	        }
@@ -983,7 +995,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          height: 42px;
 	          border-radius: var(--wt-radius-sm);
 	          border: 1px solid var(--wt-border);
-	          background: var(--wt-surface2);
+	          background: var(--wt-surface);
 	          color: var(--primary-text-color);
 	          cursor: pointer;
 	          display: flex;
@@ -1002,7 +1014,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          align-items:center;
 	          justify-content:flex-start;
 	          gap: 10px;
-	          background: var(--wt-surface2);
+	          background: var(--wt-surface);
 	        }
 	        .peoplelabel {
 	          font-size: 11px;
@@ -1063,10 +1075,10 @@ class WeeklyTrainingCard extends HTMLElement {
 	          touch-action: manipulation;
 	          transition: background 120ms ease;
 	        }
-	        .day:last-child { border-bottom: 0; }
-	        .day:hover { background: rgba(127,127,127,0.06); }
-	        .day.active { background: var(--wt-surface2); }
-	        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; background: var(--wt-surface2); }
+		        .day:last-child { border-bottom: 0; }
+		        .day:hover { background: var(--wt-subtle); }
+		        .day.active { background: var(--wt-subtle); }
+		        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; background: var(--wt-subtle); }
 	        .day .meta { display:flex; flex-direction:column; gap: 3px; padding-top: 2px; }
 	        .day .name { font-weight: 800; font-size: 13px; }
 	        .day .hint2 { font-size: 12px; color: var(--wt-text2); }
@@ -1078,7 +1090,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          border-radius: 999px;
 	          padding: 5px 9px;
 	          color: var(--wt-text2);
-	          background: var(--wt-surface2);
+	          background: var(--wt-subtle);
 	        }
 	        .badge.today { border-color: var(--primary-color); color: var(--primary-color); font-weight: 900; background: var(--wt-surface); }
 	        .daybadges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap: 6px; max-width: 170px; padding-top: 2px; }
@@ -1124,7 +1136,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          border-radius: 999px;
 	          padding: 6px 10px;
 	          border: 1px solid var(--wt-border);
-	          background: var(--wt-surface2);
+	          background: var(--wt-subtle);
 	          color: var(--wt-text2);
 	          white-space: nowrap;
 	        }
@@ -1135,7 +1147,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          border: 1px solid var(--wt-border);
 	          border-radius: var(--wt-radius);
 	          padding: 10px 12px;
-	          background: var(--wt-surface2);
+	          background: var(--wt-surface);
 	        }
 	        .cb-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
 	        .cb-title { font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wt-text2); }
@@ -1172,7 +1184,7 @@ class WeeklyTrainingCard extends HTMLElement {
         .empty-title { font-size: 14px; font-weight: 700; color: var(--primary-text-color); }
         .empty-sub { margin-top: 6px; font-size: 12px; color: var(--secondary-text-color); }
 	        .items { margin-top: 12px; display:flex; flex-direction:column; gap: 10px; }
-	        .item { border: 1px solid var(--wt-border); border-radius: var(--wt-radius-sm); padding: 12px; background: var(--wt-surface2); }
+		        .item { border: 1px solid var(--wt-border); border-radius: var(--wt-radius-sm); padding: 12px; background: var(--wt-subtle2); }
 	        .item .ex { font-weight: 900; font-size: 13px; }
         .actions { display:flex; gap: 8px; flex-wrap:wrap; }
 	        .actions button {
@@ -1648,24 +1660,37 @@ class WeeklyTrainingCard extends HTMLElement {
         if (tile) tile.classList.toggle("off", !e.target.checked);
       });
     });
-    const qCName = this.shadowRoot ? this.shadowRoot.querySelector("#c-name") : null;
-    if (qCName) qCName.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.name = String(e.target.value || ""); });
-    const qCTags = this.shadowRoot ? this.shadowRoot.querySelector("#c-tags") : null;
-    if (qCTags) qCTags.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.tags = String(e.target.value || ""); });
-    const qCEq = this.shadowRoot ? this.shadowRoot.querySelector("#c-eq") : null;
-    if (qCEq) qCEq.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.equipment = String(e.target.value || ""); });
-    const qCAdd = this.shadowRoot ? this.shadowRoot.querySelector("#c-add") : null;
-    if (qCAdd) qCAdd.addEventListener("click", () => {
-      if (!this._settingsDraft) return;
-      const name = String(this._settingsDraft.new_custom.name || "").trim();
-      if (!name) return;
-      const csv = (s) => String(s || "").split(",").map((p) => p.trim()).filter(Boolean);
-      const tags = csv(this._settingsDraft.new_custom.tags).map((t) => t.toLowerCase());
-      const equipment = csv(this._settingsDraft.new_custom.equipment).map((t) => t.toLowerCase());
-      this._settingsDraft.custom = [...(this._settingsDraft.custom || []), { name, tags, equipment }];
-      this._settingsDraft.new_custom = { name: "", tags: "", equipment: "" };
-      this._render();
-    });
+	    const qCName = this.shadowRoot ? this.shadowRoot.querySelector("#c-name") : null;
+	    if (qCName) qCName.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.name = String(e.target.value || ""); });
+	    const qCGroup = this.shadowRoot ? this.shadowRoot.querySelector("#c-group") : null;
+	    if (qCGroup) qCGroup.addEventListener("change", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.group = String(e.target.value || "Core"); });
+	    const qCTags = this.shadowRoot ? this.shadowRoot.querySelector("#c-tags") : null;
+	    if (qCTags) qCTags.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.tags = String(e.target.value || ""); });
+	    const qCEq = this.shadowRoot ? this.shadowRoot.querySelector("#c-eq") : null;
+	    if (qCEq) qCEq.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.equipment = String(e.target.value || ""); });
+	    const qCAdd = this.shadowRoot ? this.shadowRoot.querySelector("#c-add") : null;
+	    if (qCAdd) qCAdd.addEventListener("click", () => {
+	      if (!this._settingsDraft) return;
+	      const name = String(this._settingsDraft.new_custom.name || "").trim();
+	      if (!name) return;
+	      const csv = (s) => String(s || "").split(",").map((p) => p.trim()).filter(Boolean);
+	      const tags = csv(this._settingsDraft.new_custom.tags).map((t) => t.toLowerCase());
+	      const equipment = csv(this._settingsDraft.new_custom.equipment).map((t) => t.toLowerCase());
+	      const group = String(this._settingsDraft.new_custom.group || "Core");
+	      const groupTag = (() => {
+	        if (group === "Core") return "core";
+	        if (group === "Lower body") return "lower";
+	        if (group === "Push") return "push";
+	        if (group === "Pull") return "pull";
+	        if (group === "Shoulders") return "shoulders";
+	        if (group === "Arms") return "arms";
+	        return "";
+	      })();
+	      if (groupTag && tags.indexOf(groupTag) === -1) tags.unshift(groupTag);
+	      this._settingsDraft.custom = [...(this._settingsDraft.custom || []), { name, tags, equipment }];
+	      this._settingsDraft.new_custom = { name: "", group: group || "Core", tags: "", equipment: "" };
+	      this._render();
+	    });
     this.shadowRoot.querySelectorAll("button[data-custom-del]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         if (!this._settingsDraft) return;

@@ -105,3 +105,9 @@ All notable changes to this project will be documented in this file.
 - Fix: active person accent color now updates correctly when switching people (CSS variable scope).
 - Board: completed workouts no longer show as “Done” on the day list; they disappear from the board and live only in Completed.
 - Completed: long-press a completed chip to open a workout detail popup.
+
+## 0.1.15 - 2026-02-14
+
+- Settings: when adding a custom exercise you can pick a Category (Lower body/Push/Pull/Shoulders/Core/Arms/Other).
+  - New custom exercises are automatically tagged so they appear in the right category section grid.
+- UI: updated subtle surfaces to avoid large gray blocks while keeping HA theme-native styling.
