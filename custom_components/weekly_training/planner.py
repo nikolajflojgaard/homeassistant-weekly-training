@@ -30,6 +30,31 @@ def _effective_today_local() -> date:
     return today
 
 
+def _parse_sets_reps(value: str) -> tuple[int, int]:
+    raw = str(value or "").lower().replace("×", "x")
+    parts = [p.strip() for p in raw.split("x") if p.strip()]
+    if len(parts) != 2:
+        return (3, 5)
+    try:
+        s = int(parts[0])
+        r = int(parts[1])
+        return (max(1, s), max(1, r))
+    except Exception:  # noqa: BLE001
+        return (3, 5)
+
+
+def _format_sets_reps(sets_n: int, reps_n: int) -> str:
+    return f"{max(1, int(sets_n))} x {max(1, int(reps_n))}"
+
+
+def _week_index_from_start(*, start_week_start: date, week_start_day: date, cycle_len: int) -> int:
+    if cycle_len <= 0:
+        return 0
+    delta_weeks = int(round((week_start_day - start_week_start).days / 7))
+    # Python modulo handles negatives the way we want for repeating cycles.
+    return delta_weeks % cycle_len
+
+
 def _csv_set(raw: str) -> set[str]:
     return {part.strip().lower() for part in str(raw or "").split(",") if part.strip()}
 
@@ -160,6 +185,45 @@ def generate_session(
     if not isinstance(session_overrides, dict):
         session_overrides = {}
 
+    cycle_cfg = overrides.get("cycle") if isinstance(overrides.get("cycle"), dict) else {}
+    cycle_enabled = bool(cycle_cfg.get("enabled")) if isinstance(cycle_cfg.get("enabled"), bool) else False
+    cycle_preset = str(cycle_cfg.get("preset") or "strength").strip().lower()
+    if cycle_preset not in {"strength", "hypertrophy", "minimalist"}:
+        cycle_preset = "strength"
+    try:
+        cycle_step_pct = float(cycle_cfg.get("step_pct")) if cycle_cfg.get("step_pct") is not None else 2.5
+    except Exception:  # noqa: BLE001
+        cycle_step_pct = 2.5
+    try:
+        deload_pct = float(cycle_cfg.get("deload_pct")) if cycle_cfg.get("deload_pct") is not None else 10.0
+    except Exception:  # noqa: BLE001
+        deload_pct = 10.0
+    try:
+        deload_volume = float(cycle_cfg.get("deload_volume")) if cycle_cfg.get("deload_volume") is not None else 0.65
+    except Exception:  # noqa: BLE001
+        deload_volume = 0.65
+
+    start_week_start_raw = str(cycle_cfg.get("start_week_start") or "").strip()
+    start_week_start = None
+    if start_week_start_raw:
+        try:
+            start_week_start = _week_start(date.fromisoformat(start_week_start_raw))
+        except Exception:  # noqa: BLE001
+            start_week_start = None
+    if cycle_enabled and start_week_start is None:
+        # If enabled but unset, treat current week as cycle start.
+        start_week_start = _week_start(_effective_today_local())
+
+    cycle_len = 4
+    cycle_index = 0
+    if cycle_enabled and start_week_start is not None:
+        cycle_index = _week_index_from_start(start_week_start=start_week_start, week_start_day=week_start_day, cycle_len=cycle_len)
+    is_deload = cycle_enabled and cycle_index == 3
+    if is_deload:
+        # Make deload feel different even if the user doesn't change intensity.
+        if intensity == "hard":
+            intensity = "normal"
+
     gender = str(profile.get("gender") or "male").lower()
     duration = int(profile.get("duration_minutes") or 45)
     preferred = _csv_set(profile.get("preferred_exercises") or "")
@@ -181,7 +245,7 @@ def generate_session(
     max_bp = float(maxes.get("bench") or 0)
     ctx = PickContext(equipment=equipment, preferred=preferred, disabled=disabled)
 
-    # Rep ranges: keep simple, slight variation by gender purely as defaults.
+    # Rep ranges: keep simple. Cycle presets can nudge volume/intensity.
     if intensity == "easy":
         main_reps = "3 x 5" if gender == "male" else "3 x 6"
         accessory_reps = "2 x 12"
@@ -192,6 +256,33 @@ def generate_session(
         main_reps = "3 x 5" if gender == "male" else "3 x 6"
         accessory_reps = "3 x 10"
     core_reps = "3 x 12"
+
+    if cycle_enabled:
+        if cycle_preset == "hypertrophy":
+            main_reps = "4 x 8" if gender == "male" else "4 x 9"
+            accessory_reps = "3 x 12"
+            core_reps = "3 x 15"
+        elif cycle_preset == "minimalist":
+            main_reps = "3 x 5"
+            accessory_reps = "2 x 10"
+            core_reps = "2 x 12"
+        else:
+            # strength
+            main_reps = "4 x 5" if gender == "male" else "4 x 6"
+            accessory_reps = "3 x 8"
+            core_reps = "3 x 12"
+
+    if is_deload:
+        ms, mr = _parse_sets_reps(main_reps)
+        as_, ar = _parse_sets_reps(accessory_reps)
+        cs, cr = _parse_sets_reps(core_reps)
+        # Reduce volume; keep reps mostly intact, reduce sets.
+        ms = max(1, int(round(ms * deload_volume)))
+        as_ = max(1, int(round(as_ * deload_volume)))
+        cs = max(1, int(round(cs * deload_volume)))
+        main_reps = _format_sets_reps(ms, mr)
+        accessory_reps = _format_sets_reps(as_, ar)
+        core_reps = _format_sets_reps(cs, cr)
 
     # Index exercises by name to allow manual selection by name.
     exercises = library.get("exercises", [])
@@ -305,8 +396,20 @@ def generate_session(
         else:
             main_pct = 0.75
 
-        # Apply progression based on week offset from the current week (UI-aligned).
-        if prog_enabled and prog_step_pct:
+        # Apply 4-week cycle if enabled, otherwise fall back to linear "plan ahead" progression.
+        if cycle_enabled:
+            try:
+                if is_deload:
+                    factor = 1.0 - (max(0.0, float(deload_pct)) / 100.0)
+                else:
+                    # week 1..3: 0, +step, +2step
+                    up = float(cycle_step_pct) * float(min(2, max(0, int(cycle_index))))
+                    factor = 1.0 + (up / 100.0)
+                factor = max(0.80, min(1.25, factor))
+                main_pct = main_pct * factor
+            except Exception:  # noqa: BLE001
+                pass
+        elif prog_enabled and prog_step_pct:
             try:
                 current_monday = _week_start(_effective_today_local())
                 offset_weeks = int(round((week_start_day - current_monday).days / 7))
@@ -360,6 +463,12 @@ def generate_session(
         "weekday": int(weekday),
         "intensity": intensity,
         "progression": {"enabled": prog_enabled, "step_pct": prog_step_pct},
+        "cycle": {
+            "enabled": cycle_enabled,
+            "preset": cycle_preset,
+            "week_index": int(cycle_index),  # 0..3
+            "is_deload": bool(is_deload),
+        },
         "items": items,
     }
 

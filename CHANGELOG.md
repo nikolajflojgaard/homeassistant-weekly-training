@@ -172,7 +172,7 @@ All notable changes to this project will be documented in this file.
   - Custom list action renamed to **Delete** and styled red.
 - UI: popup buttons now use consistent pill styling matching the rest of the UI (Delete stays red).
 
-## 0.2.9 - 2026-02-14
+## 0.3.0 - 2026-02-14
 
 - Week navigation:
   - Week header now has arrows to browse up to **3 weeks back/forward**.
@@ -180,3 +180,7 @@ All notable changes to this project will be documented in this file.
   - Week selection is calendar-driven (not tied to a person).
 - Progression:
   - When planning future weeks, suggested loads for main lifts automatically increase week-to-week (default **+2.5% / week**).
+- 4-week cycle planning:
+  - Enable a 4-week cycle with presets (**Strength-ish**, **Hypertrophy-ish**, **Minimalist**).
+  - Choose which weekdays you train; planned days are highlighted in the day list.
+  - Week 1-3 increases suggested loads; week 4 is **deload** (reduced load/volume).

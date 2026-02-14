@@ -263,6 +263,8 @@ async def ws_set_overrides(
             "preferred_exercises",
             "planning_mode",
             "intensity",
+            "progression",
+            "cycle",
             "session_overrides",
         )
     )
@@ -289,6 +291,7 @@ async def ws_set_overrides(
                 planning_mode=raw.get("planning_mode"),
                 intensity=raw.get("intensity"),
                 progression=raw.get("progression") if isinstance(raw.get("progression"), dict) else None,
+                cycle=raw.get("cycle") if isinstance(raw.get("cycle"), dict) else None,
                 session_overrides=raw.get("session_overrides") if isinstance(raw.get("session_overrides"), dict) else None,
                 expected_rev=expected_rev,
             )

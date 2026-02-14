@@ -32,6 +32,10 @@ from .const import (
 )
 
 _STORAGE_VERSION = 1
+DEFAULT_CYCLE_PRESET = "strength"
+DEFAULT_CYCLE_STEP_PCT = 2.5
+DEFAULT_CYCLE_DELOAD_PCT = 10.0
+DEFAULT_CYCLE_DELOAD_VOL = 0.65
 _DEFAULT_COLORS = [
     "#475569",  # slate
     "#0f766e",  # teal
@@ -162,6 +166,14 @@ class WeeklyTrainingStore:
         self._store: Store[dict[str, Any]] = Store(hass, _STORAGE_VERSION, f"{DOMAIN}_{entry_id}")
         self._data: dict[str, Any] | None = None
 
+    @staticmethod
+    def _clamp_week_offset(value: Any) -> int:
+        try:
+            v = int(value)
+        except Exception:  # noqa: BLE001
+            return 0
+        return max(-3, min(3, v))
+
     async def async_load(self) -> dict[str, Any]:
         if self._data is None:
             loaded = await self._store.async_load()
@@ -181,6 +193,16 @@ class WeeklyTrainingStore:
                     "planning_mode": "auto",  # auto | manual
                     # Progression applies a per-week % adjustment to suggested loads for main lifts.
                     "progression": {"enabled": True, "step_pct": 2.5},
+                    # 4-week cycle planning (optional). Calendar-driven, not person-specific.
+                    "cycle": {
+                        "enabled": False,
+                        "preset": DEFAULT_CYCLE_PRESET,  # strength | hypertrophy | minimalist
+                        "start_week_start": "",  # ISO date for Monday (YYYY-MM-DD); if empty, auto = current week when enabled
+                        "training_weekdays": [0, 2, 4],  # Mon/Wed/Fri default when enabled
+                        "step_pct": DEFAULT_CYCLE_STEP_PCT,
+                        "deload_pct": DEFAULT_CYCLE_DELOAD_PCT,
+                        "deload_volume": DEFAULT_CYCLE_DELOAD_VOL,
+                    },
                     "session_overrides": {
                         "a_lower": "",
                         "a_push": "",
@@ -210,6 +232,12 @@ class WeeklyTrainingStore:
             # Always enforce retention on load (keeps archive at 4-week cycles).
             if isinstance(self._data.get("history"), list):
                 self._data["history"] = _trim_history(self._data["history"], keep=4)
+
+            # Clamp week_offset defensively (prevents weird UI/backends if storage is edited).
+            overrides0 = self._data.get("overrides")
+            if isinstance(overrides0, dict):
+                overrides0["week_offset"] = self._clamp_week_offset(overrides0.get("week_offset"))
+                self._data["overrides"] = overrides0
 
             # Normalize custom exercises from older schema.
             cfg = self._data.get("exercise_config")
@@ -311,12 +339,23 @@ class WeeklyTrainingStore:
         prev_overrides = state.get("overrides") if isinstance(state, dict) else None
         if not isinstance(prev_overrides, dict):
             prev_overrides = {}
-        keep_week_offset = int(prev_overrides.get("week_offset") or 0)
+        keep_week_offset = self._clamp_week_offset(prev_overrides.get("week_offset"))
         keep_selected_weekday = prev_overrides.get("selected_weekday")
         keep_selected_weekday = int(keep_selected_weekday) if keep_selected_weekday is not None else None
         keep_progression = prev_overrides.get("progression")
         if not isinstance(keep_progression, dict):
             keep_progression = {"enabled": True, "step_pct": 2.5}
+        keep_cycle = prev_overrides.get("cycle")
+        if not isinstance(keep_cycle, dict):
+            keep_cycle = {
+                "enabled": False,
+                "preset": DEFAULT_CYCLE_PRESET,
+                "start_week_start": "",
+                "training_weekdays": [0, 2, 4],
+                "step_pct": DEFAULT_CYCLE_STEP_PCT,
+                "deload_pct": DEFAULT_CYCLE_DELOAD_PCT,
+                "deload_volume": DEFAULT_CYCLE_DELOAD_VOL,
+            }
 
         person = next((p for p in people if isinstance(p, dict) and str(p.get("id")) == person_id), None)
         if isinstance(person, dict):
@@ -327,6 +366,7 @@ class WeeklyTrainingStore:
                 "preferred_exercises": str(person.get("preferred_exercises") or ""),
                 "planning_mode": "auto",
                 "progression": keep_progression,
+                "cycle": keep_cycle,
                 "session_overrides": {
                     "a_lower": "",
                     "a_push": "",
@@ -352,6 +392,7 @@ class WeeklyTrainingStore:
         session_overrides: dict[str, str] | None = None,
         intensity: str | None = None,
         progression: dict[str, Any] | None = None,
+        cycle: dict[str, Any] | None = None,
         expected_rev: int | None = None,
     ) -> dict[str, Any]:
         state = await self.async_load()
@@ -365,10 +406,19 @@ class WeeklyTrainingStore:
                 "preferred_exercises": "",
                 "planning_mode": "auto",
                 "progression": {"enabled": True, "step_pct": 2.5},
+                "cycle": {
+                    "enabled": False,
+                    "preset": DEFAULT_CYCLE_PRESET,
+                    "start_week_start": "",
+                    "training_weekdays": [0, 2, 4],
+                    "step_pct": DEFAULT_CYCLE_STEP_PCT,
+                    "deload_pct": DEFAULT_CYCLE_DELOAD_PCT,
+                    "deload_volume": DEFAULT_CYCLE_DELOAD_VOL,
+                },
                 "session_overrides": {},
             }
         if week_offset is not None:
-            overrides["week_offset"] = int(week_offset)
+            overrides["week_offset"] = self._clamp_week_offset(week_offset)
         if selected_weekday is not None:
             overrides["selected_weekday"] = int(selected_weekday)
         if duration_minutes is not None:
@@ -395,6 +445,59 @@ class WeeklyTrainingStore:
             if "step_pct" not in cur:
                 cur["step_pct"] = 2.5
             overrides["progression"] = cur
+        if cycle is not None:
+            cur = overrides.get("cycle")
+            if not isinstance(cur, dict):
+                cur = {}
+            if isinstance(cycle.get("enabled"), bool):
+                cur["enabled"] = bool(cycle.get("enabled"))
+            preset = str(cycle.get("preset") or "").strip().lower()
+            if preset in {"strength", "hypertrophy", "minimalist"}:
+                cur["preset"] = preset
+            if cycle.get("start_week_start") is not None:
+                cur["start_week_start"] = str(cycle.get("start_week_start") or "").strip()
+            tw = cycle.get("training_weekdays")
+            if isinstance(tw, list):
+                cleaned: list[int] = []
+                for x in tw:
+                    try:
+                        xi = int(x)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if 0 <= xi <= 6 and xi not in cleaned:
+                        cleaned.append(xi)
+                cleaned.sort()
+                cur["training_weekdays"] = cleaned
+            if cycle.get("step_pct") is not None:
+                try:
+                    cur["step_pct"] = float(cycle.get("step_pct"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if cycle.get("deload_pct") is not None:
+                try:
+                    cur["deload_pct"] = float(cycle.get("deload_pct"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if cycle.get("deload_volume") is not None:
+                try:
+                    cur["deload_volume"] = float(cycle.get("deload_volume"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if "enabled" not in cur:
+                cur["enabled"] = False
+            if "preset" not in cur:
+                cur["preset"] = DEFAULT_CYCLE_PRESET
+            if "start_week_start" not in cur:
+                cur["start_week_start"] = ""
+            if "training_weekdays" not in cur or not isinstance(cur.get("training_weekdays"), list):
+                cur["training_weekdays"] = [0, 2, 4]
+            if "step_pct" not in cur:
+                cur["step_pct"] = DEFAULT_CYCLE_STEP_PCT
+            if "deload_pct" not in cur:
+                cur["deload_pct"] = DEFAULT_CYCLE_DELOAD_PCT
+            if "deload_volume" not in cur:
+                cur["deload_volume"] = DEFAULT_CYCLE_DELOAD_VOL
+            overrides["cycle"] = cur
         if session_overrides is not None:
             current = overrides.get("session_overrides")
             if not isinstance(current, dict):
