@@ -144,3 +144,10 @@ All notable changes to this project will be documented in this file.
   - Add Delete button (removes the workout from Completed).
 - Swipe hardening:
   - Swipe actions trigger only on clear left/right gestures (vertical scrolling is not affected).
+
+## 0.2.4 - 2026-02-14
+
+- UI polish (tablet-first):
+  - Header is now single-line: Week + People + Settings.
+  - Modals: action buttons are pinned to the bottom (with a red Delete button where relevant).
+  - Subtle elevation/gradients for a more premium HA-native look.
