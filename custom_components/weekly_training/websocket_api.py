@@ -432,6 +432,80 @@ async def ws_generate_plan(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "weekly_training/generate_cycle",
+        vol.Required("entry_id"): str,
+        vol.Required("person_id"): str,
+        vol.Required("start_week_start"): str,  # ISO date for Monday (YYYY-MM-DD)
+        vol.Optional("weeks"): vol.Coerce(int),
+        vol.Optional("weekdays"): list,  # 0..6 (Mon..Sun)
+    }
+)
+@websocket_api.async_response
+async def ws_generate_cycle(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Bulk-generate a multi-week cycle for selected weekdays.
+
+    This avoids UI loops of set_overrides+generate calls. It writes all sessions
+    and returns updated state once.
+    """
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+
+    person_id = str(msg.get("person_id") or "").strip()
+    if not person_id:
+        connection.send_error(msg["id"], "invalid", "person_id is required")
+        return
+
+    try:
+        start_week_start = date.fromisoformat(str(msg.get("start_week_start") or "").strip())
+    except Exception:  # noqa: BLE001
+        connection.send_error(msg["id"], "invalid", "start_week_start must be an ISO date (YYYY-MM-DD)")
+        return
+
+    weeks = int(msg.get("weeks") or 4)
+    weeks = max(1, min(12, weeks))
+    weekdays_raw = msg.get("weekdays")
+    if not isinstance(weekdays_raw, list):
+        weekdays_raw = []
+    weekdays: list[int] = []
+    for x in weekdays_raw:
+        try:
+            xi = int(x)
+        except Exception:  # noqa: BLE001
+            continue
+        if 0 <= xi <= 6 and xi not in weekdays:
+            weekdays.append(xi)
+    weekdays.sort()
+    if not weekdays:
+        connection.send_error(msg["id"], "invalid", "weekdays must include at least one day (0..6)")
+        return
+
+    # Coordinator offsets are relative to its effective "current Monday" (Monday 01:00 rule).
+    current_monday = coordinator._week_start_for_offset(0)  # noqa: SLF001
+    start_offset = int(round((start_week_start - current_monday).days / 7))
+
+    # Generate each planned day across N weeks. Do not pass expected_rev, since rev increments per write.
+    try:
+        state = None
+        for w in range(weeks):
+            off = start_offset + w
+            for wd in weekdays:
+                state = await coordinator.async_generate_for_day(person_id=person_id, week_offset=off, weekday=int(wd), expected_rev=None)
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
+
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state or {}, runtime=_runtime_payload())})
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "weekly_training/upsert_workout",
         vol.Required("entry_id"): str,
         vol.Required("person_id"): str,
@@ -570,6 +644,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_delete_person)
     websocket_api.async_register_command(hass, ws_get_plan)
     websocket_api.async_register_command(hass, ws_generate_plan)
+    websocket_api.async_register_command(hass, ws_generate_cycle)
     websocket_api.async_register_command(hass, ws_get_library)
     websocket_api.async_register_command(hass, ws_set_workout_completed)
     websocket_api.async_register_command(hass, ws_delete_workout)

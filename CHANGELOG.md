@@ -184,3 +184,9 @@ All notable changes to this project will be documented in this file.
   - Enable a 4-week cycle with presets (**Strength-ish**, **Hypertrophy-ish**, **Minimalist**).
   - Choose which weekdays you train; planned days are highlighted in the day list.
   - Week 1-3 increases suggested loads; week 4 is **deload** (reduced load/volume).
+
+## 0.3.1 - 2026-02-14
+
+- Cycle planning UX:
+  - Move 4-week cycle planning out of Settings and into the main UI (empty workout panel).
+  - Add a dedicated Cycle Planner modal and a one-click **bulk generator** for the next N weeks.

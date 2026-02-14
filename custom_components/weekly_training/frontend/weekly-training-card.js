@@ -71,6 +71,8 @@ class WeeklyTrainingCard extends HTMLElement {
 	      editPersonId: "",
 	      showSettings: false,
 	      settingsQuery: "",
+	      showCyclePlanner: false,
+	      cycleDraft: null,
 	      showWorkout: false,
 	      workoutDay: null, // 0..6
 	      selectedDay: null, // 0..6
@@ -471,6 +473,80 @@ class WeeklyTrainingCard extends HTMLElement {
         overrides: { week_offset: Number(next), selected_weekday: this._selectedWeekday },
       });
       this._applyState((res && res.state) || this._state);
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  _openCyclePlanner() {
+    const people = this._people();
+    const pid = String(this._activePersonId() || this._defaultPersonId() || "");
+    const rt = (this._state && this._state.runtime) || {};
+    const startWeek = this._selectedWeekStartIso(rt);
+    const cur = (this._draft && this._draft.cycle && typeof this._draft.cycle === "object") ? this._draft.cycle : {};
+    const preset = String(cur.preset || "strength");
+    const tdays = Array.isArray(cur.training_weekdays) ? cur.training_weekdays.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [0, 2, 4];
+    const stepPct = cur.step_pct != null ? Number(cur.step_pct) : 3.0;
+    const deloadPct = cur.deload_pct != null ? Number(cur.deload_pct) : 10.0;
+    const deloadVol = cur.deload_volume != null ? Number(cur.deload_volume) : 0.65;
+    this._ui.cycleDraft = {
+      person_id: pid || (people[0] && people[0].id ? String(people[0].id) : ""),
+      start_week_start: String(startWeek || ""),
+      weeks: 4,
+      preset,
+      training_weekdays: Array.from(new Set(tdays)).sort((a, b) => a - b),
+      step_pct: stepPct,
+      deload_pct: deloadPct,
+      deload_volume: deloadVol,
+    };
+    this._ui.showCyclePlanner = true;
+    this._render();
+  }
+
+  async _planCycle() {
+    const d = this._ui && this._ui.cycleDraft ? this._ui.cycleDraft : null;
+    if (!d) return;
+    const personId = String(d.person_id || "");
+    const startWeekStart = String(d.start_week_start || "").slice(0, 10);
+    const weeks = Number(d.weeks || 4);
+    const weekdays = Array.isArray(d.training_weekdays) ? d.training_weekdays : [];
+    if (!personId || !startWeekStart || !weekdays.length) return;
+
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      // Persist cycle config (calendar-driven) so planned highlights stay stable.
+      const cycle = {
+        enabled: true,
+        preset: String(d.preset || "strength"),
+        start_week_start: startWeekStart,
+        training_weekdays: weekdays,
+        step_pct: Number(d.step_pct || 0),
+        deload_pct: Number(d.deload_pct || 0),
+        deload_volume: Number(d.deload_volume || 0.65),
+      };
+      await this._callWS({
+        type: "weekly_training/set_overrides",
+        entry_id: this._entryId,
+        overrides: { cycle },
+      });
+
+      const res = await this._callWS({
+        type: "weekly_training/generate_cycle",
+        entry_id: this._entryId,
+        person_id: personId,
+        start_week_start: startWeekStart,
+        weeks: weeks,
+        weekdays: weekdays,
+      });
+      this._applyState((res && res.state) || this._state);
+      this._ui.showCyclePlanner = false;
+      this._ui.cycleDraft = null;
+      this._showToast("Planned 4-week cycle", "", null);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -1090,6 +1166,92 @@ class WeeklyTrainingCard extends HTMLElement {
 	      </div>
 	    ` : "";
 
+	    const cycleDraft = this._ui && this._ui.cycleDraft && typeof this._ui.cycleDraft === "object" ? this._ui.cycleDraft : null;
+	    const cycleModal = this._ui.showCyclePlanner && cycleDraft ? (() => {
+	      const wk0 = String(cycleDraft.start_week_start || weekStartIso || "").slice(0, 10);
+	      const wkNum = wk0 ? this._isoWeekNumberFromWeekStart(wk0) : 0;
+	      const wkLabel = wkNum ? `Week ${wkNum}` : "Week";
+	      const wkRange = wk0 ? this._formatWeekRange(wk0) : "";
+	      const tds = Array.isArray(cycleDraft.training_weekdays) ? cycleDraft.training_weekdays : [];
+	      return `
+	        <div class="modal-backdrop" id="cycle-backdrop" aria-hidden="false">
+	          <div class="modal" role="dialog" aria-label="Plan 4-week cycle">
+	            <div class="modal-h">
+	              <div class="modal-title">Plan 4-week cycle</div>
+	              <button class="icon-btn" id="cycle-close" title="Close">\u00d7</button>
+	            </div>
+	            <div class="modal-b">
+	              <div class="hint">This will generate workouts for the next <b>${this._escape(String(cycleDraft.weeks || 4))}</b> weeks starting from <b>${this._escape(wkLabel)}</b> (${this._escape(wkRange)}).</div>
+	              <div class="row compact" style="margin-top:10px">
+	                <div>
+	                  <div class="label">Person</div>
+	                  <select data-focus-key="cy_person" id="cy-person" ${saving ? "disabled" : ""}>
+	                    ${people.map((p) => {
+	                      const pid = String((p && p.id) || "");
+	                      const nm = String((p && p.name) || pid);
+	                      if (!pid) return "";
+	                      return `<option value="${this._escape(pid)}" ${pid === String(cycleDraft.person_id || "") ? "selected" : ""}>${this._escape(nm)}</option>`;
+	                    }).join("")}
+	                  </select>
+	                </div>
+	                <div>
+	                  <div class="label">Preset</div>
+	                  <select data-focus-key="cy_preset2" id="cy-preset2" ${saving ? "disabled" : ""}>
+	                    ${[
+	                      { v: "strength", l: "Strength-ish" },
+	                      { v: "hypertrophy", l: "Hypertrophy-ish" },
+	                      { v: "minimalist", l: "Minimalist" },
+	                    ].map((x) => {
+	                      const cur = String(cycleDraft.preset || "strength");
+	                      return `<option value="${this._escape(x.v)}" ${cur === x.v ? "selected" : ""}>${this._escape(x.l)}</option>`;
+	                    }).join("")}
+	                  </select>
+	                </div>
+	                <div>
+	                  <div class="label">Weeks</div>
+	                  <input data-focus-key="cy_weeks" id="cy-weeks" type="number" min="1" max="12" step="1" value="${this._escape(String(cycleDraft.weeks || 4))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	              </div>
+
+	              <div class="row compact" style="margin-top:10px">
+	                <div style="grid-column: 1 / -1">
+	                  <div class="label">Training weekdays</div>
+	                  <div class="hint">Select the days you want to train.</div>
+	                  <div class="weekdays" id="cy-weekdays2">
+	                    ${daysDa.map((name, idx) => {
+	                      const short = String(name || "").slice(0, 3);
+	                      const on = tds.includes(idx);
+	                      return `<button class="wday ${on ? "on" : "off"}" data-cy-wd="${idx}" ${saving ? "disabled" : ""}>${this._escape(short)}</button>`;
+	                    }).join("")}
+	                  </div>
+	                </div>
+	              </div>
+
+	              <div class="divider"></div>
+	              <div class="row compact">
+	                <div>
+	                  <div class="label">Step % (week 2-3)</div>
+	                  <input data-focus-key="cy_step2" id="cy-step2" type="number" min="0" max="10" step="0.5" value="${this._escape(String(cycleDraft.step_pct != null ? cycleDraft.step_pct : 3.0))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	                <div>
+	                  <div class="label">Deload % (week 4)</div>
+	                  <input data-focus-key="cy_deload2" id="cy-deload2" type="number" min="0" max="30" step="0.5" value="${this._escape(String(cycleDraft.deload_pct != null ? cycleDraft.deload_pct : 10.0))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	                <div>
+	                  <div class="label">Deload volume</div>
+	                  <input data-focus-key="cy_vol2" id="cy-vol2" type="number" min="0.3" max="1" step="0.05" value="${this._escape(String(cycleDraft.deload_volume != null ? cycleDraft.deload_volume : 0.65))}" ${saving ? "disabled" : ""}/>
+	                </div>
+	              </div>
+	            </div>
+	            <div class="modal-f">
+	              <button id="cycle-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+	              <button class="primary" id="cycle-plan" ${saving ? "disabled" : ""}>Plan</button>
+	            </div>
+	          </div>
+	        </div>
+	      `;
+	    })() : "";
+
 		    const settingsModal = this._ui.showSettings ? (() => {
 	      const draft = this._settingsDraft || { disabled: new Set(), custom: [], query: "", new_custom: { name: "", group: "Core", tags: "", equipment: "" } };
       const base = Array.isArray(this._library) ? this._library : [];
@@ -1163,61 +1325,7 @@ class WeeklyTrainingCard extends HTMLElement {
                 }).join("")}
               </div>
 
-              <div class="divider"></div>
-
-              <div class="label">Cycle planning (4 weeks)</div>
-              <div class="hint">Plan ahead. Week 1-3 increases, week 4 deload. Planned weekdays are highlighted on the board.</div>
-
-              <div class="row compact" style="margin-top:10px">
-                <div>
-                  <div class="label">Enabled</div>
-                  <label class="toggle">
-                    <input data-focus-key="cy_enabled" id="cy-enabled" type="checkbox" ${this._draft.cycle && this._draft.cycle.enabled ? "checked" : ""} ${saving ? "disabled" : ""}/>
-                    <span>4-week cycle</span>
-                  </label>
-                </div>
-                <div>
-                  <div class="label">Preset</div>
-                  <select data-focus-key="cy_preset" id="cy-preset" ${saving ? "disabled" : ""}>
-                    ${[
-                      { v: "strength", l: "Strength-ish" },
-                      { v: "hypertrophy", l: "Hypertrophy-ish" },
-                      { v: "minimalist", l: "Minimalist" },
-                    ].map((x) => {
-                      const cur = (this._draft.cycle && this._draft.cycle.preset) ? String(this._draft.cycle.preset) : "strength";
-                      return `<option value="${this._escape(x.v)}" ${String(cur) === x.v ? "selected" : ""}>${this._escape(x.l)}</option>`;
-                    }).join("")}
-                  </select>
-                </div>
-                <div>
-                  <div class="label">Step %</div>
-                  <input data-focus-key="cy_step" id="cy-step" type="number" min="0" max="10" step="0.5" value="${this._escape(String((this._draft.cycle && this._draft.cycle.step_pct != null) ? this._draft.cycle.step_pct : 3.0))}" ${saving ? "disabled" : ""}/>
-                </div>
-                <div>
-                  <div class="label">Deload %</div>
-                  <input data-focus-key="cy_deload" id="cy-deload" type="number" min="0" max="30" step="0.5" value="${this._escape(String((this._draft.cycle && this._draft.cycle.deload_pct != null) ? this._draft.cycle.deload_pct : 10.0))}" ${saving ? "disabled" : ""}/>
-                </div>
-              </div>
-
-              <div class="row compact" style="margin-top:10px">
-                <div style="grid-column: 1 / -1">
-                  <div class="label">Training weekdays</div>
-                  <div class="hint">Choose which days you plan to train. (${this._escape(String(trainingDays.length || 0))} selected)</div>
-                  <div class="weekdays" id="cy-weekdays">
-                    ${daysDa.map((name, idx) => {
-                      const short = String(name || "").slice(0, 3);
-                      const on = trainingDays.includes(idx);
-                      return `<button class="wday ${on ? "on" : "off"}" data-wd="${idx}" ${saving ? "disabled" : ""}>${this._escape(short)}</button>`;
-                    }).join("")}
-                  </div>
-                </div>
-              </div>
-
-              <div class="actions" style="margin-top:10px">
-                <button id="cy-set-start" ${saving ? "disabled" : ""}>Set cycle start to this week</button>
-              </div>
-
-              <div class="divider"></div>
+	              <div class="divider"></div>
 
               <div class="label">Custom exercises</div>
               ${custom.length ? `
@@ -2091,10 +2199,14 @@ class WeeklyTrainingCard extends HTMLElement {
 		                  }).join("")}
 		                </div>
 		              ` : `
-		                <div class="empty-main" id="open-workout">
+		                <div class="empty-main">
 		                  <div class="empty-card">
 		                    <div class="empty-title">Her kommer dit tr\u00e6ningspas</div>
 		                    <div class="empty-sub">Tap to add</div>
+		                    <div class="actions" style="margin-top:12px; justify-content:center">
+		                      <button class="primary" id="open-workout" ${saving ? "disabled" : ""}>Create workout</button>
+		                      <button id="open-cycle" ${saving ? "disabled" : ""}>Plan 4-week cycle</button>
+		                    </div>
 		                  </div>
 		                </div>
 		              `}
@@ -2148,6 +2260,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		          ${peopleModal}
 		          ${workoutModal}
 		          ${settingsModal}
+		          ${cycleModal}
 		          ${historyModal}
 		          ${completedModal}
 		          ${toast}
@@ -2218,6 +2331,8 @@ class WeeklyTrainingCard extends HTMLElement {
       this._ui.showWorkout = true;
       this._render();
     });
+    const qOpenCycle = this.shadowRoot ? this.shadowRoot.querySelector("#open-cycle") : null;
+    if (qOpenCycle) qOpenCycle.addEventListener("click", () => { this._openCyclePlanner(); });
 
 		    // People modal
 		    const qPeopleClose = this.shadowRoot ? this.shadowRoot.querySelector("#people-close") : null;
@@ -2314,6 +2429,55 @@ class WeeklyTrainingCard extends HTMLElement {
 	      }
 	      await this._generate(pid);
 	    });
+
+	    // Cycle planner modal
+	    const qCycleClose = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-close") : null;
+	    if (qCycleClose) qCycleClose.addEventListener("click", () => { this._ui.showCyclePlanner = false; this._ui.cycleDraft = null; this._render(); });
+	    const qCycleCancel = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-cancel") : null;
+	    if (qCycleCancel) qCycleCancel.addEventListener("click", () => { this._ui.showCyclePlanner = false; this._ui.cycleDraft = null; this._render(); });
+	    const qCycleBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-backdrop") : null;
+	    if (qCycleBackdrop) qCycleBackdrop.addEventListener("click", (e) => {
+	      if (e.target && e.target.id === "cycle-backdrop") { this._ui.showCyclePlanner = false; this._ui.cycleDraft = null; this._render(); }
+	    });
+	    const qCyPerson = this.shadowRoot ? this.shadowRoot.querySelector("#cy-person") : null;
+	    if (qCyPerson) qCyPerson.addEventListener("change", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.person_id = String(e.target.value || ""); });
+	    const qCyPreset2 = this.shadowRoot ? this.shadowRoot.querySelector("#cy-preset2") : null;
+	    if (qCyPreset2) qCyPreset2.addEventListener("change", (e) => {
+	      if (!this._ui.cycleDraft) return;
+	      const p = String(e.target.value || "strength");
+	      this._ui.cycleDraft.preset = p;
+	      // Apply preset defaults into the draft.
+	      this._applyCyclePreset(p);
+	      // Pull values from draft.cycle (updated by _applyCyclePreset).
+	      this._ui.cycleDraft.step_pct = Number(this._draft.cycle && this._draft.cycle.step_pct != null ? this._draft.cycle.step_pct : this._ui.cycleDraft.step_pct);
+	      this._ui.cycleDraft.deload_pct = Number(this._draft.cycle && this._draft.cycle.deload_pct != null ? this._draft.cycle.deload_pct : this._ui.cycleDraft.deload_pct);
+	      this._ui.cycleDraft.deload_volume = Number(this._draft.cycle && this._draft.cycle.deload_volume != null ? this._draft.cycle.deload_volume : this._ui.cycleDraft.deload_volume);
+	      this._render();
+	    });
+	    const qCyWeeks = this.shadowRoot ? this.shadowRoot.querySelector("#cy-weeks") : null;
+	    if (qCyWeeks) qCyWeeks.addEventListener("input", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.weeks = Number(e.target.value || 4); });
+	    const qCyStep2 = this.shadowRoot ? this.shadowRoot.querySelector("#cy-step2") : null;
+	    if (qCyStep2) qCyStep2.addEventListener("input", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.step_pct = Number(e.target.value || 0); });
+	    const qCyDeload2 = this.shadowRoot ? this.shadowRoot.querySelector("#cy-deload2") : null;
+	    if (qCyDeload2) qCyDeload2.addEventListener("input", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.deload_pct = Number(e.target.value || 0); });
+	    const qCyVol2 = this.shadowRoot ? this.shadowRoot.querySelector("#cy-vol2") : null;
+	    if (qCyVol2) qCyVol2.addEventListener("input", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.deload_volume = Number(e.target.value || 0.65); });
+	    this.shadowRoot && this.shadowRoot.querySelectorAll("button.wday[data-cy-wd]").forEach((btn) => {
+	      btn.addEventListener("click", (e) => {
+	        if (!this._ui.cycleDraft) return;
+	        const wd = Number(e.currentTarget.getAttribute("data-cy-wd"));
+	        if (!Number.isFinite(wd)) return;
+	        const cur = Array.isArray(this._ui.cycleDraft.training_weekdays) ? this._ui.cycleDraft.training_weekdays.slice() : [];
+	        const idx = cur.indexOf(wd);
+	        if (idx >= 0) cur.splice(idx, 1);
+	        else cur.push(wd);
+	        cur.sort((a, b) => a - b);
+	        this._ui.cycleDraft.training_weekdays = cur;
+	        this._render();
+	      });
+	    });
+	    const qCyclePlan = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-plan") : null;
+	    if (qCyclePlan) qCyclePlan.addEventListener("click", () => { this._planCycle(); });
 
     // Swipe actions on the generated workout (tablet-first).
 	    const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
@@ -2474,50 +2638,6 @@ class WeeklyTrainingCard extends HTMLElement {
 	    const qCEq = this.shadowRoot ? this.shadowRoot.querySelector("#c-eq") : null;
 	    if (qCEq) qCEq.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.equipment = String(e.target.value || ""); });
 
-	    // Cycle planning controls (stored in overrides, saved via Settings -> Save).
-	    const qCyEnabled = this.shadowRoot ? this.shadowRoot.querySelector("#cy-enabled") : null;
-	    if (qCyEnabled) qCyEnabled.addEventListener("change", (e) => {
-	      if (!this._draft.cycle || typeof this._draft.cycle !== "object") this._draft.cycle = {};
-	      this._draft.cycle.enabled = Boolean(e.target.checked);
-	      // If enabling and no start week chosen, default to the week currently shown.
-	      if (this._draft.cycle.enabled && !String(this._draft.cycle.start_week_start || "").trim()) {
-	        const rt = (this._state && this._state.runtime) || {};
-	        const wk = this._selectedWeekStartIso(rt);
-	        this._draft.cycle.start_week_start = String(wk || "");
-	      }
-	      this._render();
-	    });
-	    const qCyPreset = this.shadowRoot ? this.shadowRoot.querySelector("#cy-preset") : null;
-	    if (qCyPreset) qCyPreset.addEventListener("change", (e) => {
-	      this._applyCyclePreset(String(e.target.value || "strength"));
-	      this._render();
-	    });
-	    const qCyStep = this.shadowRoot ? this.shadowRoot.querySelector("#cy-step") : null;
-	    if (qCyStep) qCyStep.addEventListener("input", (e) => { if (this._draft.cycle) this._draft.cycle.step_pct = Number(e.target.value || 0); });
-	    const qCyDeload = this.shadowRoot ? this.shadowRoot.querySelector("#cy-deload") : null;
-	    if (qCyDeload) qCyDeload.addEventListener("input", (e) => { if (this._draft.cycle) this._draft.cycle.deload_pct = Number(e.target.value || 0); });
-	    const qCySetStart = this.shadowRoot ? this.shadowRoot.querySelector("#cy-set-start") : null;
-	    if (qCySetStart) qCySetStart.addEventListener("click", () => {
-	      if (!this._draft.cycle || typeof this._draft.cycle !== "object") this._draft.cycle = {};
-	      const rt = (this._state && this._state.runtime) || {};
-	      this._draft.cycle.start_week_start = String(this._selectedWeekStartIso(rt) || "");
-	      this._showToast("Cycle start set", "", null);
-	      this._render();
-	    });
-	    this.shadowRoot && this.shadowRoot.querySelectorAll("button.wday[data-wd]").forEach((btn) => {
-	      btn.addEventListener("click", (e) => {
-	        const wd = Number(e.currentTarget.getAttribute("data-wd"));
-	        if (!Number.isFinite(wd)) return;
-	        if (!this._draft.cycle || typeof this._draft.cycle !== "object") this._draft.cycle = {};
-	        const cur = Array.isArray(this._draft.cycle.training_weekdays) ? this._draft.cycle.training_weekdays.slice() : [];
-	        const idx = cur.indexOf(wd);
-	        if (idx >= 0) cur.splice(idx, 1);
-	        else cur.push(wd);
-	        cur.sort((a, b) => a - b);
-	        this._draft.cycle.training_weekdays = cur;
-	        this._render();
-	      });
-	    });
 	    const qCAdd = this.shadowRoot ? this.shadowRoot.querySelector("#c-add") : null;
 	    if (qCAdd) qCAdd.addEventListener("click", () => {
 	      if (!this._settingsDraft) return;

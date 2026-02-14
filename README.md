@@ -17,7 +17,7 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
   - Browse up to **3 weeks back/forward** using the week arrows (tap the week chip to jump back to the current week)
   - Planning modes:
     - **Plan ahead**: suggested loads progress automatically week-to-week when browsing future weeks (default: **+2.5% / week** on main lift suggestions)
-    - **4-week cycle**: Week 1-3 increases loads, Week 4 deload (configurable, with presets)
+    - **4-week cycle**: use **Plan 4-week cycle** from the empty workout panel to generate the next weeks in one go (presets + weekday selection)
   - Pick a day from the left list and generate that day's session in a popup
   - New week starts blank (generate again)
   - Week rollover happens at **Monday 01:00** (local time)
