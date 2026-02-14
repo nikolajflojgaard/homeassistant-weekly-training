@@ -908,13 +908,11 @@ class WeeklyTrainingCard extends HTMLElement {
       <style>
         :host { display:block; }
         /* Always fill the available Lovelace column width. */
-	        ha-card {
-	          overflow: hidden;
-	          width: 100%;
-	          border: 1px solid var(--accent, var(--divider-color));
-	          box-shadow: 0 0 0 1px var(--accent, var(--divider-color)) inset;
-	          ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
-	        }
+        ha-card {
+          overflow: hidden;
+          width: 100%;
+          ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
+        }
         .wrap { padding: 12px; }
         .muted { color: var(--secondary-text-color); }
         .header { display:flex; flex-direction:column; gap: 10px; }
@@ -1003,12 +1001,13 @@ class WeeklyTrainingCard extends HTMLElement {
         }
 	        .day:last-child { border-bottom: 0; }
 	        .day.active { background: var(--secondary-background-color); }
-	        .day.today { box-shadow: 0 0 0 2px var(--accent, var(--primary-color)) inset; }
+	        /* TODAY is calendar-driven (not person-driven). */
+	        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; }
 	        .day .meta { display:flex; flex-direction:column; gap: 2px; }
 	        .day .name { font-weight: 600; font-size: 13px; }
 	        .day .hint2 { font-size: 12px; color: var(--secondary-text-color); }
 	        .badge { font-size: 11px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 5px 9px; color: var(--secondary-text-color); }
-	        .badge.today { border-color: var(--accent, var(--primary-color)); color: var(--accent, var(--primary-color)); font-weight: 800; }
+	        .badge.today { border-color: var(--primary-color); color: var(--primary-color); font-weight: 800; }
 	        .daybadges { display:flex; flex-direction:column; align-items:flex-end; gap: 6px; }
 	        .wbadge {
 	          font-size: 11px;
@@ -1034,7 +1033,13 @@ class WeeklyTrainingCard extends HTMLElement {
 	          flex: 0 0 auto;
 	        }
 	        .wbadge .wtext { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
-	        .main { border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px; }
+	        /* Only the workout detail panel is accented by the active person. */
+	        .main {
+	          border: 1px solid var(--accent, var(--divider-color));
+	          box-shadow: 0 0 0 1px var(--accent, var(--divider-color)) inset;
+	          border-radius: 12px;
+	          padding: 12px;
+	        }
 	        .main h3 { margin: 0 0 6px 0; font-size: 16px; }
 	        .swipehint { margin-top: 6px; font-size: 12px; color: var(--secondary-text-color); }
 	        .completedbar {

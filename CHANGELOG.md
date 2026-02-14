@@ -83,3 +83,8 @@ All notable changes to this project will be documented in this file.
 
 - Fix: calendar runtime (`today`, `current_week_start`, week number) is now included on all websocket state updates.
   - Prevents TODAY marker and dates from changing/disappearing when switching active person or toggling completed/delete.
+
+## 0.1.11 - 2026-02-14
+
+- UI fix: active person color now accents only the workout detail panel (right side), not the entire card.
+- TODAY highlight uses theme primary color (calendar-driven), not active person color.
