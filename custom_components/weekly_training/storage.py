@@ -13,6 +13,7 @@ State model (schema v1):
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -716,6 +717,63 @@ class WeeklyTrainingStore:
             return state
         plan["workouts"] = next_workouts
         return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
+
+    async def async_delete_workout_series(
+        self,
+        *,
+        person_id: str,
+        start_week_start: str,
+        weekday: int,
+        weeks: int = 4,
+        expected_rev: int | None = None,
+    ) -> dict[str, Any]:
+        """Delete a weekly series (same weekday) across N weeks.
+
+        Used for 4-week cycles: delete a whole "series" of planned sessions.
+        """
+        state = await self.async_load()
+        self._assert_rev(state, expected_rev)
+
+        pid = str(person_id or "").strip()
+        if not pid:
+            return state
+        try:
+            start_ws = date.fromisoformat(str(start_week_start or "").strip())
+        except Exception:  # noqa: BLE001
+            return state
+        wd = max(0, min(6, int(weekday)))
+        n = max(1, min(12, int(weeks or 4)))
+
+        plans = state.get("plans")
+        if not isinstance(plans, dict):
+            return state
+        person_plans = plans.get(pid)
+        if not isinstance(person_plans, dict):
+            return state
+
+        changed = False
+        for i in range(n):
+            week_start_day = start_ws + timedelta(days=i * 7)
+            wk_key = week_start_day.isoformat()
+            plan = person_plans.get(wk_key)
+            if not isinstance(plan, dict):
+                continue
+            workouts = plan.get("workouts")
+            if not isinstance(workouts, list) or not workouts:
+                continue
+            target_date = (week_start_day + timedelta(days=wd)).isoformat()
+            next_workouts = [w for w in workouts if not (isinstance(w, dict) and str(w.get("date") or "") == target_date)]
+            if len(next_workouts) != len(workouts):
+                plan = dict(plan)
+                plan["workouts"] = next_workouts
+                person_plans[wk_key] = plan
+                changed = True
+
+        if not changed:
+            return state
+        plans[pid] = person_plans
+        state["plans"] = plans
+        return await self.async_save(state)
 
     async def async_upsert_workout(
         self,

@@ -75,6 +75,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	      cycleDraft: null,
 	      showEditWorkout: false,
 	      editWorkout: null,
+	      confirmDelete: null, // { kind, person_id, week_start, date, series_start, weekday, weeks }
 	      showWorkout: false,
 	      workoutDay: null, // 0..6
 	      selectedDay: null, // 0..6
@@ -605,6 +606,69 @@ class WeeklyTrainingCard extends HTMLElement {
       await this._deleteWorkout(pid, wk, dateIso);
       this._ui.showEditWorkout = false;
       this._ui.editWorkout = null;
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  _openDeleteChoiceForWorkout(personId, weekStartIso, workout) {
+    const pid = String(personId || "");
+    const wk = String(weekStartIso || "").slice(0, 10);
+    const w = workout && typeof workout === "object" ? workout : null;
+    const dateIso = w ? String(w.date || "") : "";
+    if (!pid || !wk || !dateIso) return;
+
+    const cy = w && w.cycle && typeof w.cycle === "object" ? w.cycle : null;
+    const isSeries = Boolean(cy && cy.enabled);
+    const weekIndex = cy && Number.isFinite(Number(cy.week_index)) ? Number(cy.week_index) : null;
+    const seriesStart = (() => {
+      // Prefer inference from the workout itself (robust if overrides were changed later).
+      if (weekIndex != null) {
+        try {
+          const d0 = new Date(wk + "T00:00:00Z");
+          d0.setUTCDate(d0.getUTCDate() - (Number(weekIndex) * 7));
+          return d0.toISOString().slice(0, 10);
+        } catch (_) {}
+      }
+      // Fall back to current cycle config if available.
+      const cur = this._draft && this._draft.cycle && typeof this._draft.cycle === "object" ? this._draft.cycle : null;
+      const s = cur ? String(cur.start_week_start || "") : "";
+      return s ? s.slice(0, 10) : wk;
+    })();
+
+    const wd = w && w.weekday != null ? Number(w.weekday) : null;
+    const weekday = wd != null && Number.isFinite(wd) ? wd : 0;
+
+    this._ui.confirmDelete = {
+      kind: "workout_delete",
+      person_id: pid,
+      week_start: wk,
+      date: dateIso,
+      series_start: String(seriesStart || wk).slice(0, 10),
+      weekday: Number(weekday),
+      weeks: 4,
+      is_series: isSeries,
+    };
+    this._render();
+  }
+
+  async _deleteWorkoutSeries(personId, seriesStartIso, weekday, weeks) {
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      const res = await this._callWS({
+        type: "weekly_training/delete_workout_series",
+        entry_id: this._entryId,
+        person_id: String(personId || ""),
+        start_week_start: String(seriesStartIso || ""),
+        weekday: Number(weekday || 0),
+        weeks: Number(weeks || 4),
+      });
+      this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -1372,6 +1436,44 @@ class WeeklyTrainingCard extends HTMLElement {
 	              <div class="actions" style="margin:0">
 	                <button id="editw-cancel" ${saving ? "disabled" : ""}>Close</button>
 	                <button class="primary" id="editw-save" ${saving ? "disabled" : ""}>Save</button>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      `;
+	    })() : "";
+
+	    const confirmDeleteModal = this._ui && this._ui.confirmDelete && this._ui.confirmDelete.kind === "workout_delete" ? (() => {
+	      const d = this._ui.confirmDelete || {};
+	      const pid = String(d.person_id || "");
+	      const wk = String(d.week_start || "").slice(0, 10);
+	      const dateIso = String(d.date || "");
+	      const isSeries = Boolean(d.is_series);
+	      const person = this._personById(pid);
+	      const pname = person ? String(person.name || "") : "";
+	      const pcolor = person ? this._personColor(person) : "";
+	      return `
+	        <div class="modal-backdrop" id="cfd-backdrop" aria-hidden="false">
+	          <div class="modal" role="dialog" aria-label="Delete workout">
+	            <div class="modal-h">
+	              <div class="modal-title">Delete workout</div>
+	              <button class="icon-btn" id="cfd-close" title="Close">\u00d7</button>
+	            </div>
+	            <div class="modal-b">
+	              <div class="hint">
+	                <span class="pcircle" style="background:${this._escape(pcolor)}">${this._escape((pname || "?").slice(0, 1).toUpperCase())}</span>
+	                <span style="margin-left:8px; font-weight:800">${this._escape(pname || pid)}</span>
+	                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
+	              </div>
+	              <div class="hint" style="margin-top:10px">
+	                ${isSeries ? "This workout is part of a 4-week cycle. What do you want to delete?" : "Delete this workout?"}
+	              </div>
+	            </div>
+	            <div class="modal-f">
+	              <button id="cfd-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+	              <div class="actions" style="margin:0">
+	                ${isSeries ? `<button class="danger" id="cfd-series" ${saving ? "disabled" : ""}>Delete series</button>` : ``}
+	                <button class="danger" id="cfd-one" ${saving ? "disabled" : ""}>Delete workout</button>
 	              </div>
 	            </div>
 	          </div>
@@ -2389,6 +2491,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		          ${settingsModal}
 		          ${cycleModal}
 		          ${editWorkoutModal}
+		          ${confirmDeleteModal}
 		          ${historyModal}
 		          ${completedModal}
 		          ${toast}
@@ -2707,15 +2810,21 @@ class WeeklyTrainingCard extends HTMLElement {
 		              this._showToast("Marked completed", "Undo", { kind: "toggle_completed", person_id: pid, week_start: wk, date: dateIso, completed: false });
 		            }
 		          } else {
-		            const ok = window.confirm("Delete this workout?");
-		            if (!ok) return;
-		            const snapshot = JSON.parse(JSON.stringify(selectedWorkout));
-		            await this._deleteWorkout(pid, wk, dateIso);
-		            this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid, week_start: wk, workout: snapshot });
+			            const cy = selectedWorkout && selectedWorkout.cycle && typeof selectedWorkout.cycle === "object" ? selectedWorkout.cycle : null;
+			            if (cy && cy.enabled) {
+			              // Offer delete single vs series.
+			              this._openDeleteChoiceForWorkout(pid, wk, selectedWorkout);
+			            } else {
+			              const ok = window.confirm("Delete this workout?");
+			              if (!ok) return;
+			              const snapshot = JSON.parse(JSON.stringify(selectedWorkout));
+			              await this._deleteWorkout(pid, wk, dateIso);
+			              this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid, week_start: wk, workout: snapshot });
+			            }
 		          }
 		          clearSwipeUI();
-	        } catch (_) {}
-	      }, { passive: true });
+		        } catch (_) {}
+		      }, { passive: true });
 		      swipeZone.addEventListener("touchcancel", () => { clearSwipeUI(); }, { passive: true });
 		    }
 
@@ -2758,6 +2867,40 @@ class WeeklyTrainingCard extends HTMLElement {
 	    if (qEwSave) qEwSave.addEventListener("click", () => { this._saveEditedWorkout(); });
 	    const qEwDel = this.shadowRoot ? this.shadowRoot.querySelector("#editw-delete") : null;
 	    if (qEwDel) qEwDel.addEventListener("click", () => { this._deleteEditedWorkout(); });
+
+	    // Confirm delete modal (single vs series)
+	    const qCfdClose = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-close") : null;
+	    if (qCfdClose) qCfdClose.addEventListener("click", () => { this._ui.confirmDelete = null; this._render(); });
+	    const qCfdCancel = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-cancel") : null;
+	    if (qCfdCancel) qCfdCancel.addEventListener("click", () => { this._ui.confirmDelete = null; this._render(); });
+	    const qCfdBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-backdrop") : null;
+	    if (qCfdBackdrop) qCfdBackdrop.addEventListener("click", (e) => {
+	      if (e.target && e.target.id === "cfd-backdrop") { this._ui.confirmDelete = null; this._render(); }
+	    });
+	    const qCfdOne = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-one") : null;
+	    if (qCfdOne) qCfdOne.addEventListener("click", async () => {
+	      const d = this._ui.confirmDelete || {};
+	      const pid2 = String(d.person_id || "");
+	      const wk2 = String(d.week_start || "").slice(0, 10);
+	      const date2 = String(d.date || "");
+	      if (!pid2 || !wk2 || !date2) return;
+	      this._ui.confirmDelete = null;
+	      const snapshot = selectedWorkout ? JSON.parse(JSON.stringify(selectedWorkout)) : null;
+	      await this._deleteWorkout(pid2, wk2, date2);
+	      if (snapshot) this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid2, week_start: wk2, workout: snapshot });
+	    });
+	    const qCfdSeries = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-series") : null;
+	    if (qCfdSeries) qCfdSeries.addEventListener("click", async () => {
+	      const d = this._ui.confirmDelete || {};
+	      const pid2 = String(d.person_id || "");
+	      const ss = String(d.series_start || "").slice(0, 10);
+	      const wd2 = Number(d.weekday || 0);
+	      const weeks2 = Number(d.weeks || 4);
+	      if (!pid2 || !ss) return;
+	      this._ui.confirmDelete = null;
+	      await this._deleteWorkoutSeries(pid2, ss, wd2, weeks2);
+	      this._showToast("Series deleted", "", null);
+	    });
 
 	    // Settings modal
     const qSettingsClose = this.shadowRoot ? this.shadowRoot.querySelector("#settings-close") : null;

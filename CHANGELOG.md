@@ -195,3 +195,8 @@ All notable changes to this project will be documented in this file.
 
 - Workout details:
   - Long-press the workout in the right panel to open a popup where you can **edit** or **delete** it.
+
+## 0.3.3 - 2026-02-14
+
+- Cycle delete:
+  - Swipe-left delete on a cycle workout now prompts: **Delete workout** or **Delete series** (4 weeks).
