@@ -99,3 +99,9 @@ All notable changes to this project will be documented in this file.
   - Cleaner typography/spacing and consistent surfaces
   - People bar restyled (no dashed outline)
   - Day list badges and workout detail panel look more like a paid product while staying HA-native
+
+## 0.1.14 - 2026-02-14
+
+- Fix: active person accent color now updates correctly when switching people (CSS variable scope).
+- Board: completed workouts no longer show as “Done” on the day list; they disappear from the board and live only in Completed.
+- Completed: long-press a completed chip to open a workout detail popup.

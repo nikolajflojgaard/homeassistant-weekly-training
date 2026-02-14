@@ -634,6 +634,8 @@ class WeeklyTrainingCard extends HTMLElement {
 	        for (let wi = 0; wi < workouts2.length; wi++) {
 	          const w2 = workouts2[wi];
 	          if (!w2 || typeof w2 !== "object") continue;
+	          // Completed workouts do not show on the day board.
+	          if (w2.completed) continue;
 	          const dIso2 = String(w2.date || "");
 	          if (!dIso2) continue;
 	          const d2 = new Date(dIso2 + "T00:00:00Z");
@@ -670,7 +672,7 @@ class WeeklyTrainingCard extends HTMLElement {
     const maxWidthCss = maxWidthRaw ? this._cssSize(maxWidthRaw) : "";
     const accent = viewPerson ? this._personColor(viewPerson) : "var(--primary-color)";
 
-    const isEditPerson = Boolean(String(this._ui.editPersonId || "").trim());
+	    const isEditPerson = Boolean(String(this._ui.editPersonId || "").trim());
     const peopleModal = this._ui.showPeople ? `
       <div class="modal-backdrop" id="people-backdrop" aria-hidden="false">
         <div class="modal" role="dialog" aria-label="People">
@@ -813,7 +815,7 @@ class WeeklyTrainingCard extends HTMLElement {
       </div>
     ` : "";
 
-    const settingsModal = this._ui.showSettings ? (() => {
+	    const settingsModal = this._ui.showSettings ? (() => {
       const draft = this._settingsDraft || { disabled: new Set(), custom: [], query: "", new_custom: { name: "", tags: "", equipment: "" } };
       const exercises = Array.isArray(this._library) ? this._library : [];
       const grouped = this._groupExercisesForSettings(exercises);
@@ -905,12 +907,48 @@ class WeeklyTrainingCard extends HTMLElement {
           </div>
         </div>
       `;
-    })() : "";
+	    })() : "";
+
+	    const completedModal = this._ui && this._ui.showCompleted ? (() => {
+	      const d = this._ui.completedDetail || {};
+	      const pname = String(d.person_name || "");
+	      const pcolor = String(d.person_color || "");
+	      const wname = String(d.workout_name || "Workout");
+	      const dateIso = String(d.date || "");
+	      const items = Array.isArray(d.items) ? d.items : [];
+	      return `
+	        <div class="modal-backdrop" id="completed-backdrop" aria-hidden="false">
+	          <div class="modal" role="dialog" aria-label="Completed workout">
+	            <div class="modal-h">
+	              <div class="modal-title">${this._escape(wname)}</div>
+	              <button class="icon-btn" id="completed-close" title="Close">\u00d7</button>
+	            </div>
+	            <div class="modal-b">
+	              <div class="hint">
+	                <span class="pcircle" style="background:${this._escape(pcolor)}">${this._escape((pname || "?").slice(0, 1).toUpperCase())}</span>
+	                <span style="margin-left:8px; font-weight:800">${this._escape(pname)}</span>
+	                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
+	              </div>
+	              <div class="items" style="margin-top:12px">
+	                ${items.map((it) => {
+	                  if (!it || typeof it !== "object") return "";
+	                  const ex = String(it.exercise || "");
+	                  const sr = String(it.sets_reps || "");
+	                  const load = it.suggested_load != null ? String(it.suggested_load) : "";
+	                  return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
+	                }).join("")}
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	      `;
+	    })() : "";
 
 	    this.shadowRoot.innerHTML = `
 	      <style>
 	        :host {
 	          display:block;
+	          --accent: ${this._escape(accent)};
 	          --wt-radius: 16px;
 	          --wt-radius-sm: 12px;
 	          --wt-border: var(--divider-color);
@@ -1257,7 +1295,7 @@ class WeeklyTrainingCard extends HTMLElement {
         }
       </style>
 
-	      <ha-card style="--accent:${this._escape(accent)};">
+	      <ha-card>
         <div class="wrap">
           ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
           ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
@@ -1293,43 +1331,43 @@ class WeeklyTrainingCard extends HTMLElement {
 
           <div class="layout">
 	            <div class="days" role="list" aria-label="Weekdays">
-	              ${daysDa.map((d, idx) => {
-	                const w = workoutsByDay[idx];
-	                const entries = allByDay[idx] || [];
-	                const activeCls = idx === selectedDay ? "active" : "";
-	                const isToday = idx === todayWeekday;
-	                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
-	                const small = w ? (w.completed ? "Completed" : String(w.name || "Session")) : "Tap to add";
-	                const done = w && w.completed ? true : false;
-	                return `
-	                  <button class="day ${activeCls} ${isToday ? "today" : ""}" data-day="${idx}" ${saving ? "disabled" : ""}>
-	                    <div class="meta">
-	                      <div class="name">${this._escape(d)}</div>
-	                      <div class="hint2">${dateShort ? this._escape(dateShort) + " \u2022 " : ""}${this._escape(small)}</div>
-	                    </div>
-	                    <div class="daybadges">
-	                      ${isToday ? `<span class="badge today">TODAY</span>` : ``}
-	                      ${entries.length ? entries.map((x) => {
-	                        const p = x.person;
-	                        const w3 = x.workout;
-	                        const nm = String((p && p.name) || "");
-	                        const initial = (nm || "?").slice(0, 1).toUpperCase();
-	                        const color = this._personColor(p);
-	                        const label = w3 && w3.completed ? "Done" : "Workout";
-	                        return `<span class="wbadge" style="border-color:${this._escape(color)}"><span class="mini" style="background:${this._escape(color)}">${this._escape(initial)}</span><span class="wtext">${this._escape(label)}</span></span>`;
-	                      }).join("") : `<span class="badge">${done ? "Done" : "Empty"}</span>`}
-	                    </div>
-	                  </button>
-	                `;
-	              }).join("")}
-	            </div>
+		              ${daysDa.map((d, idx) => {
+		                const w0 = workoutsByDay[idx];
+		                const w = w0 && w0.completed ? null : w0;
+		                const entries = allByDay[idx] || [];
+		                const activeCls = idx === selectedDay ? "active" : "";
+		                const isToday = idx === todayWeekday;
+		                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
+		                const small = w ? (w.completed ? "Completed" : String(w.name || "Session")) : "Tap to add";
+		                return `
+		                  <button class="day ${activeCls} ${isToday ? "today" : ""}" data-day="${idx}" ${saving ? "disabled" : ""}>
+		                    <div class="meta">
+		                      <div class="name">${this._escape(d)}</div>
+		                      <div class="hint2">${dateShort ? this._escape(dateShort) + " \u2022 " : ""}${this._escape(small)}</div>
+		                    </div>
+		                    <div class="daybadges">
+		                      ${isToday ? `<span class="badge today">TODAY</span>` : ``}
+		                      ${entries.length ? entries.map((x) => {
+		                        const p = x.person;
+		                        const w3 = x.workout;
+		                        const nm = String((p && p.name) || "");
+		                        const initial = (nm || "?").slice(0, 1).toUpperCase();
+		                        const color = this._personColor(p);
+		                        const label = "Workout";
+		                        return `<span class="wbadge" style="border-color:${this._escape(color)}"><span class="mini" style="background:${this._escape(color)}">${this._escape(initial)}</span><span class="wtext">${this._escape(label)}</span></span>`;
+		                      }).join("") : `<span class="badge">Empty</span>`}
+		                    </div>
+		                  </button>
+		                `;
+		              }).join("")}
+		            </div>
 
 		            <div class="main" id="main-panel">
 		              <div class="mainhead">
 		                <div>
 		                  <div class="dtitle">${this._escape(daysDa[selectedDay] || "Day")}</div>
 		                  <div class="dsub">
-		                    ${(() => {
+		          ${(() => {
 		                      const ds = dayDates[selectedDay] ? String(dayDates[selectedDay]) : "";
 		                      if (selectedWorkout) {
 		                        return `${this._escape(ds ? ds + " \u2022 " : "")}${this._escape(String(selectedWorkout.name || "Session"))} \u2022 ${this._escape(String(selectedWorkout.date || ""))}`;
@@ -1383,16 +1421,16 @@ class WeeklyTrainingCard extends HTMLElement {
 	              }
 	            }
 	            out.sort((a, b) => String(a.workout.date || "").localeCompare(String(b.workout.date || "")));
-	            const chips = out.map((x) => {
-	              const p = x.person;
-	              const w = x.workout;
-	              const nm = String((p && p.name) || "");
-	              const initial = (nm || "?").slice(0, 1).toUpperCase();
-	              const color = this._personColor(p);
-	              const dateIso = String(w.date || "");
-	              const label = String(w.name || "Session");
-	              return `<div class="cb-chip"><span class="pcircle" style="background:${this._escape(color)}">${this._escape(initial)}</span>${this._escape(label)} \u2022 ${this._escape(dateIso)}</div>`;
-	            }).join("");
+		            const chips = out.map((x) => {
+		              const p = x.person;
+		              const w = x.workout;
+		              const nm = String((p && p.name) || "");
+		              const initial = (nm || "?").slice(0, 1).toUpperCase();
+		              const color = this._personColor(p);
+		              const dateIso = String(w.date || "");
+		              const label = String(w.name || "Session");
+		              return `<div class="cb-chip" data-cw-person="${this._escape(String((p && p.id) || ""))}" data-cw-date="${this._escape(dateIso)}"><span class="pcircle" style="background:${this._escape(color)}">${this._escape(initial)}</span>${this._escape(label)} \u2022 ${this._escape(dateIso)}</div>`;
+		            }).join("");
 	            return `
 	              <div class="completedbar">
 	                <div class="cb-h">
@@ -1404,14 +1442,15 @@ class WeeklyTrainingCard extends HTMLElement {
 	                </div>
 	              </div>
 	            `;
-	          })()}
+		          })()}
 
-          ${peopleModal}
-          ${workoutModal}
-          ${settingsModal}
-        </div>
-      </ha-card>
-    `;
+	          ${peopleModal}
+	          ${workoutModal}
+	          ${settingsModal}
+	          ${completedModal}
+	        </div>
+	      </ha-card>
+	    `;
 
     // Wire events (header)
     const qSettings = this.shadowRoot ? this.shadowRoot.querySelector("#settings") : null;
@@ -1581,7 +1620,7 @@ class WeeklyTrainingCard extends HTMLElement {
       }, { passive: true });
     }
 
-    // Settings modal
+	    // Settings modal
     const qSettingsClose = this.shadowRoot ? this.shadowRoot.querySelector("#settings-close") : null;
     if (qSettingsClose) qSettingsClose.addEventListener("click", () => { this._ui.showSettings = false; this._settingsDraft = null; this._render(); });
     const qSettingsCancel = this.shadowRoot ? this.shadowRoot.querySelector("#s-cancel") : null;
@@ -1638,10 +1677,65 @@ class WeeklyTrainingCard extends HTMLElement {
       });
     });
 
-    if (this._ui.showSettings && this._settingsDraft) {
+	    if (this._ui.showSettings && this._settingsDraft) {
       // Apply any existing query without re-rendering (keeps focus stable).
       this._applySettingsFilter(this._settingsDraft.query);
-    }
+	    }
+
+	    // Completed modal
+	    const qCompletedClose = this.shadowRoot ? this.shadowRoot.querySelector("#completed-close") : null;
+	    if (qCompletedClose) qCompletedClose.addEventListener("click", () => { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); });
+	    const qCompletedBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#completed-backdrop") : null;
+	    if (qCompletedBackdrop) qCompletedBackdrop.addEventListener("click", (e) => {
+	      if (e.target && e.target.id === "completed-backdrop") { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); }
+	    });
+
+	    // Long-press chips in Completed bar to view details.
+	    this.shadowRoot.querySelectorAll(".cb-chip[data-cw-person][data-cw-date]").forEach((chip) => {
+	      chip.addEventListener("pointerdown", (e) => {
+	        const pid = String(e.currentTarget.getAttribute("data-cw-person") || "");
+	        const dateIso = String(e.currentTarget.getAttribute("data-cw-date") || "");
+	        if (!pid || !dateIso) return;
+	        const lp = this._ui.longPress;
+	        if (lp && lp.timer) window.clearTimeout(lp.timer);
+	        if (lp) lp.fired = false;
+	        if (lp) {
+	          lp.timer = window.setTimeout(() => {
+	            lp.fired = true;
+	            try {
+	              const wk = weekStartIso ? String(weekStartIso).slice(0, 10) : "";
+	              const plans = this._state && this._state.plans && typeof this._state.plans === "object" ? this._state.plans : null;
+	              const personPlans = plans && plans[pid] ? plans[pid] : null;
+	              const plan2 = personPlans && typeof personPlans === "object" ? personPlans[wk] : null;
+	              const workouts2 = plan2 && Array.isArray(plan2.workouts) ? plan2.workouts : [];
+	              const w = workouts2.find((x) => x && typeof x === "object" && String(x.date || "") === dateIso) || null;
+	              const p = this._personById(pid);
+	              if (!w || !p) return;
+	              this._ui.completedDetail = {
+	                person_id: pid,
+	                person_name: String(p.name || ""),
+	                person_color: this._personColor(p),
+	                workout_name: String(w.name || "Workout"),
+	                date: String(w.date || ""),
+	                items: Array.isArray(w.items) ? w.items : [],
+	              };
+	              this._ui.showCompleted = true;
+	              this._render();
+	            } catch (_) {}
+	          }, 520);
+	        }
+	      });
+	      chip.addEventListener("pointerup", () => {
+	        const lp = this._ui.longPress;
+	        if (lp && lp.timer) window.clearTimeout(lp.timer);
+	        if (lp) lp.timer = 0;
+	      });
+	      chip.addEventListener("pointercancel", () => {
+	        const lp = this._ui.longPress;
+	        if (lp && lp.timer) window.clearTimeout(lp.timer);
+	        if (lp) lp.timer = 0;
+	      });
+	    });
 
     // Restore focus after re-render (only happens on load/save/generate)
     queueMicrotask(() => this._restoreFocus());
