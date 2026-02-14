@@ -1,0 +1,1 @@
+# homeassistant-weekly-training
