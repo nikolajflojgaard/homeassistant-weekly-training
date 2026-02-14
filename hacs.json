@@ -1,0 +1,9 @@
+{
+  "name": "Weekly Training",
+  "content_in_root": false,
+  "domains": [
+    "weekly_training"
+  ],
+  "homeassistant": "2024.6.0",
+  "render_readme": true
+}

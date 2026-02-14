@@ -1,0 +1,26 @@
+title: Weekly Training
+path: weekly-training
+icon: mdi:dumbbell
+type: sections
+max_columns: 2
+sections:
+  - type: grid
+    cards:
+      - type: custom:weekly-training-card
+        title: Weekly Training
+        # If you have multiple entries, set entry_id explicitly:
+        # entry_id: 0123456789abcdef0123456789abcdef
+
+  - type: grid
+    cards:
+      - type: entities
+        title: Quick Controls (Entities)
+        show_header_toggle: false
+        entities:
+          - entity: button.weekly_training_generate_weekly_plan
+          - entity: sensor.weekly_training_weekly_plan
+          - entity: select.weekly_training_person
+          - entity: select.weekly_training_planning_mode
+          - entity: number.weekly_training_session_minutes
+          - entity: text.weekly_training_preferred_exercises
+

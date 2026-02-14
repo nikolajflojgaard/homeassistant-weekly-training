@@ -1,0 +1,205 @@
+generate_weekly_plan:
+  name: Generate weekly plan
+  description: Generate and persist this week's full-body strength plan.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Config entry ID.
+      required: true
+      selector:
+        text:
+    person_id:
+      name: Person ID
+      description: Optional person id to generate plan for (defaults to active person).
+      required: false
+      selector:
+        text:
+
+get_weekly_plan:
+  name: Get weekly plan
+  description: Return the latest generated weekly plan.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Config entry ID.
+      required: true
+      selector:
+        text:
+    person_id:
+      name: Person ID
+      description: Optional person id to read plan for (defaults to active person).
+      required: false
+      selector:
+        text:
+
+list_people:
+  name: List people
+  description: Return all people configured for this entry.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Config entry ID.
+      required: true
+      selector:
+        text:
+
+add_person:
+  name: Add person
+  description: Add a person profile.
+  fields:
+    entry_id:
+      name: Entry ID
+      required: true
+      selector:
+        text:
+    name:
+      name: Name
+      required: true
+      selector:
+        text:
+    gender:
+      name: Gender
+      required: false
+      default: male
+      selector:
+        select:
+          options:
+            - male
+            - female
+    duration_minutes:
+      name: Default session minutes
+      required: false
+      default: 45
+      selector:
+        number:
+          min: 20
+          max: 120
+          mode: box
+    preferred_exercises:
+      name: Preferred exercises/tags (CSV)
+      required: false
+      default: ""
+      selector:
+        text:
+    equipment:
+      name: Equipment (CSV)
+      required: false
+      default: "bodyweight, dumbbell, barbell, band"
+      selector:
+        text:
+    units:
+      name: Units
+      required: false
+      default: kg
+      selector:
+        select:
+          options:
+            - kg
+            - lb
+    max_squat:
+      name: Squat 1RM
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 20
+          max: 400
+          mode: box
+    max_deadlift:
+      name: Deadlift 1RM
+      required: false
+      default: 120
+      selector:
+        number:
+          min: 20
+          max: 500
+          mode: box
+    max_bench:
+      name: Bench press 1RM
+      required: false
+      default: 80
+      selector:
+        number:
+          min: 10
+          max: 300
+          mode: box
+
+update_person:
+  name: Update person
+  description: Update fields for a person profile.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    person_id:
+      required: true
+      selector:
+        text:
+    name:
+      required: false
+      selector:
+        text:
+    gender:
+      required: false
+      selector:
+        select:
+          options:
+            - male
+            - female
+    duration_minutes:
+      required: false
+      selector:
+        number:
+          min: 20
+          max: 120
+          mode: box
+    preferred_exercises:
+      required: false
+      selector:
+        text:
+    equipment:
+      required: false
+      selector:
+        text:
+    units:
+      required: false
+      selector:
+        select:
+          options:
+            - kg
+            - lb
+    max_squat:
+      required: false
+      selector:
+        number:
+          min: 20
+          max: 400
+          mode: box
+    max_deadlift:
+      required: false
+      selector:
+        number:
+          min: 20
+          max: 500
+          mode: box
+    max_bench:
+      required: false
+      selector:
+        number:
+          min: 10
+          max: 300
+          mode: box
+
+delete_person:
+  name: Delete person
+  description: Delete a person profile.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    person_id:
+      required: true
+      selector:
+        text:

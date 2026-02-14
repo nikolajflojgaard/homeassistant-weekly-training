@@ -1,0 +1,65 @@
+{
+  "exercises": [
+    { "name": "Back Squat", "tags": ["squat", "leg", "barbell"], "equipment": ["barbell"] },
+    { "name": "Front Squat", "tags": ["squat", "leg", "barbell"], "equipment": ["barbell"] },
+    { "name": "Paused Squat", "tags": ["squat", "leg", "barbell"], "equipment": ["barbell"] },
+    { "name": "Goblet Squat", "tags": ["squat", "leg", "dumbbell"], "equipment": ["dumbbell"] },
+    { "name": "Bulgarian Split Squat", "tags": ["lunge", "single_leg", "leg"], "equipment": ["bodyweight", "dumbbell"] },
+    { "name": "Walking Lunge", "tags": ["lunge", "single_leg", "leg"], "equipment": ["bodyweight", "dumbbell"] },
+    { "name": "Reverse Lunge", "tags": ["lunge", "single_leg", "leg"], "equipment": ["bodyweight", "dumbbell"] },
+
+    { "name": "Deadlift", "tags": ["hinge", "deadlift", "posterior_chain", "barbell"], "equipment": ["barbell"] },
+    { "name": "Romanian Deadlift", "tags": ["hinge", "deadlift", "hamstrings", "barbell"], "equipment": ["barbell", "dumbbell"] },
+    { "name": "Good Morning", "tags": ["hinge", "posterior_chain", "barbell"], "equipment": ["barbell"] },
+    { "name": "Hip Thrust", "tags": ["hinge", "glutes", "posterior_chain"], "equipment": ["barbell", "bodyweight"] },
+
+    { "name": "Bench Press", "tags": ["bench", "push", "barbell", "chest"], "equipment": ["barbell"] },
+    { "name": "Close-Grip Bench Press", "tags": ["bench", "push", "barbell", "triceps"], "equipment": ["barbell"] },
+    { "name": "Incline Dumbbell Press", "tags": ["dumbbell_press", "push", "chest"], "equipment": ["dumbbell"] },
+    { "name": "Dumbbell Bench Press", "tags": ["dumbbell_press", "push", "chest"], "equipment": ["dumbbell"] },
+    { "name": "Push-Up", "tags": ["push", "chest", "bodyweight"], "equipment": ["bodyweight"] },
+    { "name": "Dips", "tags": ["push", "triceps", "bodyweight"], "equipment": ["bodyweight"] },
+
+    { "name": "Overhead Press", "tags": ["overhead_press", "press", "push", "barbell", "shoulders"], "equipment": ["barbell"] },
+    { "name": "Dumbbell Overhead Press", "tags": ["overhead_press", "press", "push", "dumbbell", "shoulders"], "equipment": ["dumbbell"] },
+    { "name": "Push Press", "tags": ["overhead_press", "press", "push", "barbell", "shoulders"], "equipment": ["barbell"] },
+
+    { "name": "Barbell Row", "tags": ["row", "pull", "barbell", "back"], "equipment": ["barbell"] },
+    { "name": "Pendlay Row", "tags": ["row", "pull", "barbell", "back"], "equipment": ["barbell"] },
+    { "name": "One-Arm Dumbbell Row", "tags": ["row", "pull", "dumbbell", "back"], "equipment": ["dumbbell"] },
+    { "name": "Inverted Row", "tags": ["row", "pull", "bodyweight", "back"], "equipment": ["bodyweight"] },
+
+    { "name": "Pull-Up", "tags": ["pullup", "pull", "lat", "bodyweight"], "equipment": ["bodyweight"] },
+    { "name": "Chin-Up", "tags": ["pullup", "pull", "lat", "biceps", "bodyweight"], "equipment": ["bodyweight"] },
+    { "name": "Band-Assisted Pull-Up", "tags": ["pullup", "pull", "lat", "band"], "equipment": ["band", "bodyweight"] },
+
+    { "name": "Lateral Raise", "tags": ["shoulders", "accessory"], "equipment": ["dumbbell", "band"] },
+    { "name": "Rear Delt Fly", "tags": ["rear_delt", "shoulders", "accessory"], "equipment": ["dumbbell", "band"] },
+    { "name": "Face Pull (Band)", "tags": ["rear_delt", "shoulders", "accessory", "band"], "equipment": ["band"] },
+
+    { "name": "Bicep Curl", "tags": ["arms", "biceps", "accessory"], "equipment": ["dumbbell", "barbell", "band"] },
+    { "name": "Hammer Curl", "tags": ["arms", "biceps", "accessory"], "equipment": ["dumbbell"] },
+    { "name": "Triceps Extension", "tags": ["arms", "triceps", "accessory"], "equipment": ["dumbbell", "band"] },
+    { "name": "Skull Crushers", "tags": ["arms", "triceps", "accessory"], "equipment": ["barbell", "dumbbell"] },
+
+    { "name": "Plank", "tags": ["core"], "equipment": ["bodyweight"] },
+    { "name": "Side Plank", "tags": ["core"], "equipment": ["bodyweight"] },
+    { "name": "Hanging Knee Raise", "tags": ["core"], "equipment": ["bodyweight"] },
+    { "name": "Ab Wheel Rollout", "tags": ["core"], "equipment": ["bodyweight"] },
+    { "name": "Dead Bug", "tags": ["core"], "equipment": ["bodyweight"] }
+  ],
+  "tags": {
+    "squat": "Squat pattern",
+    "deadlift": "Deadlift pattern",
+    "hinge": "Hip hinge",
+    "bench": "Bench / horizontal press",
+    "overhead_press": "Overhead press",
+    "row": "Row",
+    "pullup": "Pull-up / vertical pull",
+    "lunge": "Lunge / split squat",
+    "core": "Core",
+    "arms": "Arms",
+    "shoulders": "Shoulders"
+  }
+}
+

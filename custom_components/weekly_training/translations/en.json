@@ -1,0 +1,54 @@
+{
+  "title": "Weekly Training",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Weekly Training",
+        "description": "Generate a weekly full-body strength plan with people profiles.",
+        "data": {
+          "name": "Name"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "name": "Name"
+        }
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "generate_weekly_plan": {
+        "name": "Generate weekly plan"
+      }
+    },
+    "sensor": {
+      "weekly_plan": {
+        "name": "Weekly plan"
+      }
+    },
+    "select": {
+      "active_person": {
+        "name": "Person"
+      },
+      "planning_mode": {
+        "name": "Planning mode"
+      }
+    },
+    "number": {
+      "session_minutes": {
+        "name": "Session minutes"
+      }
+    },
+    "text": {
+      "preferred_exercises": {
+        "name": "Preferred exercises"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+"""Websocket state helpers."""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def public_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Return a stable public payload for the UI."""
+    if not isinstance(state, dict):
+        return {}
+    return {
+        "schema": int(state.get("schema") or 1),
+        "people": state.get("people", []),
+        "active_person_id": str(state.get("active_person_id") or ""),
+        "overrides": state.get("overrides", {}),
+        "plans": state.get("plans", {}),
+        "updated_at": str(state.get("updated_at") or ""),
+    }
+
