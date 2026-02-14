@@ -92,3 +92,10 @@ All notable changes to this project will be documented in this file.
 ## 0.1.12 - 2026-02-14
 
 - UX: when a workout is swiped to Completed, the right detail panel becomes blank (completed workouts live in the bottom Completed bar).
+
+## 0.1.13 - 2026-02-14
+
+- UI redesign (tablet-first):
+  - Cleaner typography/spacing and consistent surfaces
+  - People bar restyled (no dashed outline)
+  - Day list badges and workout detail panel look more like a paid product while staying HA-native

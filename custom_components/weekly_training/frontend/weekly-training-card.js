@@ -907,121 +907,154 @@ class WeeklyTrainingCard extends HTMLElement {
       `;
     })() : "";
 
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display:block; }
-        /* Always fill the available Lovelace column width. */
-        ha-card {
-          overflow: hidden;
-          width: 100%;
-          ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
-        }
-        .wrap { padding: 12px; }
-        .muted { color: var(--secondary-text-color); }
-        .header { display:flex; flex-direction:column; gap: 10px; }
-        .h-title { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
-	        .h-row { display:flex; align-items:center; justify-content:space-between; gap: 12px; }
-	        .weekctrl { display:flex; align-items:center; gap: 10px; }
-	        .weekpill {
-	          border: 1px solid var(--divider-color);
-	          border-radius: 12px;
-	          background: var(--card-background-color);
-          padding: 8px 12px;
-          min-width: 150px;
-        }
-        .wk { font-size: 13px; font-weight: 700; }
-        .range { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
-        .gearbtn {
-          width: 42px;
-          height: 38px;
-          border-radius: 12px;
-          border: 1px solid var(--divider-color);
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .gearbtn ha-icon { color: var(--secondary-text-color); }
-        .peoplebar {
-          border: 1px dashed var(--divider-color);
-          border-radius: 12px;
-          padding: 10px;
-          display:flex;
-          align-items:center;
-          justify-content:flex-start;
-          gap: 10px;
-          background: var(--card-background-color);
-        }
-        .peoplelabel { font-size: 13px; font-weight: 700; color: var(--primary-text-color); }
-        .peoplechips { display:flex; gap: 8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; flex: 1 1 auto; }
-	        .pchip {
-          border: 1px solid var(--divider-color);
-          border-radius: 999px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          padding: 6px 10px;
-          display:flex;
-          align-items:center;
-          gap: 8px;
-          cursor: pointer;
-          font: inherit;
+	    this.shadowRoot.innerHTML = `
+	      <style>
+	        :host {
+	          display:block;
+	          --wt-radius: 16px;
+	          --wt-radius-sm: 12px;
+	          --wt-border: var(--divider-color);
+	          --wt-surface: var(--card-background-color);
+	          --wt-surface2: var(--secondary-background-color);
+	          --wt-text2: var(--secondary-text-color);
+	          --wt-accent: var(--accent, var(--primary-color));
 	        }
-	        .pchip.active { border-color: var(--accent, var(--primary-color)); box-shadow: 0 0 0 1px var(--accent, var(--primary-color)) inset; }
-        .pcircle {
-          width: 22px;
-          height: 22px;
-          border-radius: 999px;
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          color: #fff;
-          font-size: 12px;
-          font-weight: 800;
-        }
-        .pname { font-size: 13px; }
-        .pchip.add { padding: 6px 12px; font-weight: 800; }
-        /* Tablet-first: iPad (768px) should show the 2-column layout even in portrait. */
-        .layout { display:grid; grid-template-columns: 1fr; gap: 14px; margin-top: 12px; }
-        @media (min-width: 740px) { .layout { grid-template-columns: minmax(280px, 340px) 1fr; } }
-        .days { border: 1px solid var(--divider-color); border-radius: 12px; overflow: hidden; }
-        .day {
-          width: 100%;
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          gap: 10px;
-          font: inherit;
-          border: 0;
-          border-bottom: 1px solid var(--divider-color);
-          padding: 14px 12px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          cursor: pointer;
-          text-align: left;
-          touch-action: manipulation;
-        }
-	        .day:last-child { border-bottom: 0; }
-	        .day.active { background: var(--secondary-background-color); }
-	        /* TODAY is calendar-driven (not person-driven). */
-	        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; }
-	        .day .meta { display:flex; flex-direction:column; gap: 2px; }
-	        .day .name { font-weight: 600; font-size: 13px; }
-	        .day .hint2 { font-size: 12px; color: var(--secondary-text-color); }
-	        .badge { font-size: 11px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 5px 9px; color: var(--secondary-text-color); }
-	        .badge.today { border-color: var(--primary-color); color: var(--primary-color); font-weight: 800; }
-	        .daybadges { display:flex; flex-direction:column; align-items:flex-end; gap: 6px; }
-	        .wbadge {
+	        ha-card {
+	          overflow: hidden;
+	          width: 100%;
+	          background: var(--wt-surface);
+	          ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
+	        }
+	        .wrap { padding: 16px; }
+	        .muted { color: var(--wt-text2); }
+	        .header { display:flex; flex-direction:column; gap: 12px; }
+	        .h-title { font-size: 22px; font-weight: 800; letter-spacing: 0.2px; }
+	        .h-row { display:flex; align-items:stretch; justify-content:space-between; gap: 12px; }
+	        .weekctrl { display:flex; align-items:stretch; gap: 10px; }
+	        .weekpill {
+	          border: 1px solid var(--wt-border);
+	          border-radius: var(--wt-radius-sm);
+	          background: var(--wt-surface2);
+	          padding: 10px 12px;
+	          min-width: 190px;
+	        }
+	        .wk { font-size: 13px; font-weight: 800; line-height: 1.1; }
+	        .range { font-size: 12px; color: var(--wt-text2); margin-top: 3px; }
+	        .gearbtn {
+	          width: 44px;
+	          height: 42px;
+	          border-radius: var(--wt-radius-sm);
+	          border: 1px solid var(--wt-border);
+	          background: var(--wt-surface2);
+	          color: var(--primary-text-color);
+	          cursor: pointer;
+	          display: flex;
+	          align-items: center;
+	          justify-content: center;
+	          transition: transform 90ms ease, filter 120ms ease;
+	        }
+	        .gearbtn:active { transform: scale(0.98); }
+	        .gearbtn ha-icon { color: var(--wt-text2); }
+
+	        .peoplebar {
+	          border: 1px solid var(--wt-border);
+	          border-radius: var(--wt-radius);
+	          padding: 10px 12px;
+	          display:flex;
+	          align-items:center;
+	          justify-content:flex-start;
+	          gap: 10px;
+	          background: var(--wt-surface2);
+	        }
+	        .peoplelabel {
 	          font-size: 11px;
-	          border: 1px solid var(--divider-color);
+	          font-weight: 900;
+	          letter-spacing: 0.08em;
+	          text-transform: uppercase;
+	          color: var(--wt-text2);
+	          flex: 0 0 auto;
+	        }
+	        .peoplechips { display:flex; gap: 8px; align-items:center; flex-wrap:wrap; justify-content:flex-start; flex: 1 1 auto; }
+	        .pchip {
+	          border: 1px solid var(--wt-border);
+	          border-radius: 999px;
+	          background: var(--wt-surface);
+	          color: var(--primary-text-color);
+	          padding: 7px 10px;
+	          display:flex;
+	          align-items:center;
+	          gap: 8px;
+	          cursor: pointer;
+	          font: inherit;
+	          transition: transform 90ms ease, border-color 120ms ease, box-shadow 120ms ease;
+	        }
+	        .pchip:active { transform: scale(0.985); }
+	        .pchip.active { border-color: var(--wt-accent); box-shadow: 0 0 0 1px var(--wt-accent) inset; }
+	        .pcircle {
+	          width: 22px;
+	          height: 22px;
+	          border-radius: 999px;
+	          display:inline-flex;
+	          align-items:center;
+	          justify-content:center;
+	          color: #fff;
+	          font-size: 12px;
+	          font-weight: 900;
+	        }
+	        .pname { font-size: 13px; font-weight: 700; }
+	        .pchip.add { padding: 7px 12px; font-weight: 900; }
+
+	        .layout { display:grid; grid-template-columns: 1fr; gap: 14px; margin-top: 14px; }
+	        @media (min-width: 740px) { .layout { grid-template-columns: minmax(300px, 360px) 1fr; } }
+
+	        .days { border: 1px solid var(--wt-border); border-radius: var(--wt-radius); overflow: hidden; background: var(--wt-surface); }
+	        .day {
+	          width: 100%;
+	          display:flex;
+	          align-items:flex-start;
+	          justify-content:space-between;
+	          gap: 10px;
+	          font: inherit;
+	          border: 0;
+	          border-bottom: 1px solid var(--wt-border);
+	          padding: 12px 12px;
+	          background: transparent;
+	          color: var(--primary-text-color);
+	          cursor: pointer;
+	          text-align: left;
+	          touch-action: manipulation;
+	          transition: background 120ms ease;
+	        }
+	        .day:last-child { border-bottom: 0; }
+	        .day:hover { background: rgba(127,127,127,0.06); }
+	        .day.active { background: var(--wt-surface2); }
+	        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; background: var(--wt-surface2); }
+	        .day .meta { display:flex; flex-direction:column; gap: 3px; padding-top: 2px; }
+	        .day .name { font-weight: 800; font-size: 13px; }
+	        .day .hint2 { font-size: 12px; color: var(--wt-text2); }
+
+	        .badge {
+	          font-size: 11px;
+	          font-weight: 700;
+	          border: 1px solid var(--wt-border);
 	          border-radius: 999px;
 	          padding: 5px 9px;
-	          color: var(--secondary-text-color);
+	          color: var(--wt-text2);
+	          background: var(--wt-surface2);
+	        }
+	        .badge.today { border-color: var(--primary-color); color: var(--primary-color); font-weight: 900; background: var(--wt-surface); }
+	        .daybadges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap: 6px; max-width: 170px; padding-top: 2px; }
+	        .wbadge {
+	          font-size: 11px;
+	          border: 1px solid var(--wt-border);
+	          border-radius: 999px;
+	          padding: 5px 9px;
+	          color: var(--primary-text-color);
+	          background: var(--wt-surface);
 	          display:flex;
 	          align-items:center;
 	          gap: 6px;
-	          max-width: 140px;
+	          max-width: 160px;
 	        }
 	        .wbadge .mini {
 	          width: 14px;
@@ -1032,39 +1065,54 @@ class WeeklyTrainingCard extends HTMLElement {
 	          justify-content:center;
 	          color: #fff;
 	          font-size: 9px;
-	          font-weight: 800;
+	          font-weight: 900;
 	          flex: 0 0 auto;
 	        }
-	        .wbadge .wtext { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
-	        /* Only the workout detail panel is accented by the active person. */
+	        .wbadge .wtext { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+
 	        .main {
-	          border: 1px solid var(--accent, var(--divider-color));
-	          box-shadow: 0 0 0 1px var(--accent, var(--divider-color)) inset;
-	          border-radius: 12px;
-	          padding: 12px;
+	          border: 1px solid var(--wt-accent);
+	          box-shadow: 0 0 0 1px var(--wt-accent) inset;
+	          border-radius: var(--wt-radius);
+	          padding: 14px;
+	          background: var(--wt-surface);
 	        }
-	        .main h3 { margin: 0 0 6px 0; font-size: 16px; }
-	        .swipehint { margin-top: 6px; font-size: 12px; color: var(--secondary-text-color); }
-	        .completedbar {
-	          margin-top: 12px;
-	          border: 1px solid var(--divider-color);
-	          border-radius: 12px;
-	          padding: 10px;
-	          background: var(--card-background-color);
-	        }
-	        .cb-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-	        .cb-title { font-size: 13px; font-weight: 800; }
-	        .cb-chips { margin-top: 8px; display:flex; gap: 8px; flex-wrap: wrap; }
-	        .cb-chip {
-	          border: 1px solid var(--divider-color);
+	        .mainhead { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
+	        .dtitle { font-size: 16px; font-weight: 900; letter-spacing: 0.1px; }
+	        .dsub { margin-top: 3px; font-size: 12px; color: var(--wt-text2); }
+	        .pill {
+	          font-size: 11px;
+	          font-weight: 900;
 	          border-radius: 999px;
 	          padding: 6px 10px;
-	          background: var(--card-background-color);
+	          border: 1px solid var(--wt-border);
+	          background: var(--wt-surface2);
+	          color: var(--wt-text2);
+	          white-space: nowrap;
+	        }
+	        .swipehint { margin-top: 8px; font-size: 12px; color: var(--wt-text2); }
+
+	        .completedbar {
+	          margin-top: 14px;
+	          border: 1px solid var(--wt-border);
+	          border-radius: var(--wt-radius);
+	          padding: 10px 12px;
+	          background: var(--wt-surface2);
+	        }
+	        .cb-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+	        .cb-title { font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wt-text2); }
+	        .cb-chips { margin-top: 8px; display:flex; gap: 8px; flex-wrap: wrap; }
+	        .cb-chip {
+	          border: 1px solid var(--wt-border);
+	          border-radius: 999px;
+	          padding: 7px 10px;
+	          background: var(--wt-surface);
 	          color: var(--primary-text-color);
 	          display:flex;
 	          align-items:center;
 	          gap: 8px;
 	          font-size: 13px;
+	          font-weight: 700;
 	        }
         .empty-main {
           min-height: 360px;
@@ -1085,19 +1133,19 @@ class WeeklyTrainingCard extends HTMLElement {
         }
         .empty-title { font-size: 14px; font-weight: 700; color: var(--primary-text-color); }
         .empty-sub { margin-top: 6px; font-size: 12px; color: var(--secondary-text-color); }
-        .items { margin-top: 10px; display:flex; flex-direction:column; gap: 8px; }
-        .item { border: 1px solid var(--divider-color); border-radius: 12px; padding: 10px; background: var(--card-background-color); }
-        .item .ex { font-weight: 600; }
+	        .items { margin-top: 12px; display:flex; flex-direction:column; gap: 10px; }
+	        .item { border: 1px solid var(--wt-border); border-radius: var(--wt-radius-sm); padding: 12px; background: var(--wt-surface2); }
+	        .item .ex { font-weight: 900; font-size: 13px; }
         .actions { display:flex; gap: 8px; flex-wrap:wrap; }
-        .actions button {
-          font: inherit;
-          border: 1px solid var(--divider-color);
-          border-radius: 10px;
-          padding: 10px 12px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          cursor: pointer;
-        }
+	        .actions button {
+	          font: inherit;
+	          border: 1px solid var(--wt-border);
+	          border-radius: var(--wt-radius-sm);
+	          padding: 10px 12px;
+	          background: var(--wt-surface);
+	          color: var(--primary-text-color);
+	          cursor: pointer;
+	        }
         .actions button.primary {
           background: var(--primary-color);
           border-color: var(--primary-color);
@@ -1105,16 +1153,16 @@ class WeeklyTrainingCard extends HTMLElement {
         }
         .actions button:disabled { opacity: 0.6; cursor: not-allowed; }
         .label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
-        select, input {
-          width: 100%;
-          box-sizing: border-box;
-          font: inherit;
-          border: 1px solid var(--divider-color);
-          border-radius: 10px;
-          padding: 10px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-        }
+	        select, input {
+	          width: 100%;
+	          box-sizing: border-box;
+	          font: inherit;
+	          border: 1px solid var(--wt-border);
+	          border-radius: var(--wt-radius-sm);
+	          padding: 10px;
+	          background: var(--wt-surface);
+	          color: var(--primary-text-color);
+	        }
         .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 8px; }
         .error { color: var(--error-color); font-size: 13px; margin-top: 8px; }
         .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -1276,30 +1324,43 @@ class WeeklyTrainingCard extends HTMLElement {
 	              }).join("")}
 	            </div>
 
-	            <div class="main" id="main-panel">
-	              <h3>${this._escape(daysDa[selectedDay] || "Day")}</h3>
-	              ${selectedWorkout ? `
-	                <div class="range">${this._escape(String(selectedWorkout.name || "Session"))} \u2022 ${this._escape(String(selectedWorkout.date || ""))}${selectedWorkout.completed ? " \u2022 Completed" : ""}</div>
-	                <div class="swipehint">Swipe right: completed. Swipe left: delete.</div>
-	                <div class="items" id="swipe-zone">
-	                  ${(Array.isArray(selectedWorkout.items) ? selectedWorkout.items : []).map((it) => {
-	                    if (!it || typeof it !== "object") return "";
-	                    const ex = String(it.exercise || "");
-	                    const sr = String(it.sets_reps || "");
-	                    const load = it.suggested_load != null ? String(it.suggested_load) : "";
-	                    return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
-	                  }).join("")}
-	                </div>
-	              ` : `
-	                <div class="empty-main" id="open-workout">
-	                  <div class="empty-card">
-	                    <div class="empty-title">Her kommer dit tr\u00e6ningspas</div>
-	                    <div class="empty-sub">Tap to add</div>
-	                  </div>
-	                </div>
-	              `}
-	            </div>
-	          </div>
+		            <div class="main" id="main-panel">
+		              <div class="mainhead">
+		                <div>
+		                  <div class="dtitle">${this._escape(daysDa[selectedDay] || "Day")}</div>
+		                  <div class="dsub">
+		                    ${(() => {
+		                      const ds = dayDates[selectedDay] ? String(dayDates[selectedDay]) : "";
+		                      if (selectedWorkout) {
+		                        return `${this._escape(ds ? ds + " \u2022 " : "")}${this._escape(String(selectedWorkout.name || "Session"))} \u2022 ${this._escape(String(selectedWorkout.date || ""))}`;
+		                      }
+		                      return `${this._escape(ds ? ds + " \u2022 " : "")}Tap to add`;
+		                    })()}
+		                  </div>
+		                </div>
+		                <div class="pill">${selectedWorkout ? "Workout" : "Empty"}</div>
+		              </div>
+		              ${selectedWorkout ? `
+		                <div class="swipehint">Swipe right: completed. Swipe left: delete.</div>
+		                <div class="items" id="swipe-zone">
+		                  ${(Array.isArray(selectedWorkout.items) ? selectedWorkout.items : []).map((it) => {
+		                    if (!it || typeof it !== "object") return "";
+		                    const ex = String(it.exercise || "");
+		                    const sr = String(it.sets_reps || "");
+		                    const load = it.suggested_load != null ? String(it.suggested_load) : "";
+		                    return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
+		                  }).join("")}
+		                </div>
+		              ` : `
+		                <div class="empty-main" id="open-workout">
+		                  <div class="empty-card">
+		                    <div class="empty-title">Her kommer dit tr\u00e6ningspas</div>
+		                    <div class="empty-sub">Tap to add</div>
+		                  </div>
+		                </div>
+		              `}
+		            </div>
+		          </div>
 
 	          ${(() => {
 	            const wk = weekStartIso ? String(weekStartIso).slice(0, 10) : "";
