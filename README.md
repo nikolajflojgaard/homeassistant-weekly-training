@@ -12,11 +12,12 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
   - `Week X` is shown at the top (week switching comes later)
   - Pick a day from the left list and generate that day's session in a popup
   - New week starts blank (generate again)
+  - Week rollover happens at **Monday 01:00** (local time)
 - Choose planning mode:
   - `Auto`: let the generator pick exercises
   - `Manual`: optionally choose exercises for that session
 - Exercise settings (gear icon):
-  - Disable built-in exercises you don't want suggested
+  - Disable built-in exercises you don't want suggested (grid grouped by muscle group)
   - Add custom exercises (name + tags + equipment)
 - Rule enforcement:
   - If you pick Squat, the generator will not suggest Deadlift (and vice versa)
@@ -38,13 +39,20 @@ Add a Manual card:
 ```yaml
 type: custom:weekly-training-card
 title: Ugeplan
-# Optional: cap the card's width (it will still fill the column width)
-max_width: 1100px
 ```
 
 If you have multiple entries, set `entry_id`.
 
 Example full view YAML is in `docs/lovelace_tablet_view.yaml`.
+
+### Card JS Loading
+
+This integration registers the card JS automatically on startup. If you see `Custom element doesn't exist: weekly-training-card`:
+
+1. Restart Home Assistant
+2. Hard refresh the browser (or clear the HA app cache)
+3. Optional (manual resource): add a Lovelace Resource pointing to:
+   - `/weekly_training_files/weekly-training-card.js`
 
 ## Screenshots
 

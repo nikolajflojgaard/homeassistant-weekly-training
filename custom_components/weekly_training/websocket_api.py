@@ -98,7 +98,11 @@ async def ws_get_state(
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
     state = await coordinator.store.async_load()
-    today = dt_util.as_local(dt_util.utcnow()).date()
+    # Week rollover is intentionally delayed until Monday 01:00 (local time).
+    now = dt_util.as_local(dt_util.utcnow())
+    today = now.date()
+    if now.weekday() == 0 and now.hour < 1:
+        today = today - timedelta(days=1)
     current_week_start = (today - timedelta(days=today.weekday())).isoformat()
     current_week_number = int(today.isocalendar().week)
     connection.send_result(
@@ -259,6 +263,7 @@ async def ws_get_plan(
     {
         vol.Required("type"): "weekly_training/generate_plan",
         vol.Required("entry_id"): str,
+        vol.Optional("person_id"): str,
     }
 )
 @websocket_api.async_response
@@ -272,7 +277,10 @@ async def ws_generate_plan(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = await coordinator.async_generate_for_day()
+    person_id = msg.get("person_id")
+    if person_id is not None:
+        person_id = str(person_id)
+    state = await coordinator.async_generate_for_day(person_id=person_id)
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
 
 

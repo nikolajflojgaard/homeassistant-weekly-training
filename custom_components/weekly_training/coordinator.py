@@ -59,7 +59,13 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return await self.store.async_load()
 
     def _week_start_for_offset(self, offset: int) -> date:
-        today = dt_util.as_local(dt_util.utcnow()).date()
+        # Week rollover is intentionally delayed until Monday 01:00 (local time).
+        # This avoids the "Sunday -> Monday at midnight" surprise where the UI
+        # suddenly shows a blank week right after 00:00.
+        now = dt_util.as_local(dt_util.utcnow())
+        today = now.date()
+        if now.weekday() == 0 and now.hour < 1:
+            today = today - timedelta(days=1)
         monday = today - timedelta(days=today.weekday())
         return monday + timedelta(days=int(offset) * 7)
 
@@ -107,7 +113,11 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if weekday is None:
             sel = overrides.get("selected_weekday")
             if sel is None:
-                sel = dt_util.as_local(dt_util.utcnow()).date().weekday()
+                now = dt_util.as_local(dt_util.utcnow())
+                effective = now.date()
+                if now.weekday() == 0 and now.hour < 1:
+                    effective = effective - timedelta(days=1)
+                sel = effective.weekday()
             weekday = int(sel)
         weekday = max(0, min(6, int(weekday)))
 

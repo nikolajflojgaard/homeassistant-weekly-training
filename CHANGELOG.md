@@ -46,3 +46,16 @@ All notable changes to this project will be documented in this file.
   - Persistent people avatars in the header (click to edit/update/delete)
   - Gear icon opens exercise settings (disable built-ins + add custom exercises)
 - Exercise settings are stored in HA storage and applied to session generation.
+
+## 0.1.8 - 2026-02-14
+
+- UI polish:
+  - Day list shows date per day and marks TODAY
+  - Detail panel gets a colored accent matching the selected person
+  - Exercise settings redesigned to a grouped grid (by primary muscle group)
+- Focus stability:
+  - No re-render on settings search or planning-mode toggle (keeps iPad focus/cursor stable)
+- Week rollover:
+  - New week starts at **Monday 01:00** (local time), not at midnight
+- Compatibility:
+  - Remove optional chaining/nullish coalescing from the card JS (avoids parse errors on older WebViews)
