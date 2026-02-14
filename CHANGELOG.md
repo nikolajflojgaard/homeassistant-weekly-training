@@ -229,3 +229,7 @@ All notable changes to this project will be documented in this file.
 ## 0.3.9 - 2026-02-14
 
 - Fix (hardening): cycle planner no longer blocks planning if the start week date is stale/missing; it auto-reloads state and computes a safe fallback date.
+
+## 0.3.10 - 2026-02-14
+
+- UX: left day list is now navigation-only (selects which day is shown on the right). Workout creation is only available from the right panel.

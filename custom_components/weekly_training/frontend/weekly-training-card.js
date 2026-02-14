@@ -2432,21 +2432,22 @@ class WeeklyTrainingCard extends HTMLElement {
 
           <div class="layout">
 	            <div class="days" role="list" aria-label="Weekdays">
-		              ${daysDa.map((d, idx) => {
-		                const w0 = workoutsByDay[idx];
-		                const w = w0 && w0.completed ? null : w0;
-		                const entries = allByDay[idx] || [];
-		                const activeCls = idx === selectedDay ? "active" : "";
-		                const isToday = weekOffset === 0 && idx === todayWeekday;
-		                const isPlanned = cycleInfo.in_window && trainingDays.includes(idx);
-		                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
-		                const small = w ? (w.completed ? "Completed" : String(w.name || "Session")) : "Tap to add";
-		                return `
-		                  <button class="day ${activeCls} ${isToday ? "today" : ""} ${isPlanned ? "planned" : ""}" data-day="${idx}" ${saving ? "disabled" : ""}>
-		                    <div class="meta">
-		                      <div class="name">${this._escape(d)}</div>
-		                      <div class="hint2">${dateShort ? this._escape(dateShort) + " \u2022 " : ""}${this._escape(small)}</div>
-		                    </div>
+			              ${daysDa.map((d, idx) => {
+			                const w0 = workoutsByDay[idx];
+			                const w = w0 && w0.completed ? null : w0;
+			                const entries = allByDay[idx] || [];
+			                const activeCls = idx === selectedDay ? "active" : "";
+			                const isToday = weekOffset === 0 && idx === todayWeekday;
+			                const isPlanned = cycleInfo.in_window && trainingDays.includes(idx);
+			                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
+			                // Left-side list is for navigation only (no creation from here).
+			                const small = w ? String(w.name || "Session") : "No workout";
+			                return `
+			                  <button class="day ${activeCls} ${isToday ? "today" : ""} ${isPlanned ? "planned" : ""}" data-day="${idx}" ${saving ? "disabled" : ""}>
+			                    <div class="meta">
+			                      <div class="name">${this._escape(d)}</div>
+			                      <div class="hint2">${dateShort ? this._escape(dateShort) + " \u2022 " : ""}${this._escape(small)}</div>
+			                    </div>
 		                    <div class="daybadges">
 		                      ${isToday ? `<span class="badge today">TODAY</span>` : ``}
 		                      ${isPlanned ? `<span class="badge planned">Planned</span>` : ``}
@@ -2614,16 +2615,17 @@ class WeeklyTrainingCard extends HTMLElement {
       });
     });
 
-    this.shadowRoot.querySelectorAll("button.day[data-day]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const d = Number(e.currentTarget.getAttribute("data-day"));
-        if (!Number.isFinite(d)) return;
-        this._ui.selectedDay = d;
-        this._ui.workoutPersonId = String(this._activePersonId() || this._defaultPersonId() || "");
-        this._ui.showWorkout = true;
-        this._render();
-      });
-    });
+	    this.shadowRoot.querySelectorAll("button.day[data-day]").forEach((btn) => {
+	      btn.addEventListener("click", (e) => {
+	        const d = Number(e.currentTarget.getAttribute("data-day"));
+	        if (!Number.isFinite(d)) return;
+	        this._ui.selectedDay = d;
+	        // Navigation only: selecting a day updates the right panel.
+	        // Creation/generation happens from the right panel actions.
+	        this._ui.showWorkout = false;
+	        this._render();
+	      });
+	    });
 
     const qOpenWorkout = this.shadowRoot ? this.shadowRoot.querySelector("#open-workout") : null;
     if (qOpenWorkout) qOpenWorkout.addEventListener("click", () => {
