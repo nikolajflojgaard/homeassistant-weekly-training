@@ -132,3 +132,7 @@ All notable changes to this project will be documented in this file.
 - Swipe UI: right-panel swipe feedback colors
   - Swipe right shows a green background (complete)
   - Swipe left shows a red background (delete)
+
+## 0.2.2 - 2026-02-14
+
+- History retention: archived workouts are kept for the newest 4 weeks only (4-week cycle), based on `week_start`.

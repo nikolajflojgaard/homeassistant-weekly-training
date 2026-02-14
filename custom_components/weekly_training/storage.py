@@ -12,7 +12,7 @@ State model (schema v1):
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -94,10 +94,33 @@ def _normalize_custom_exercise(ex: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _trim_history(items: list[dict[str, Any]], *, keep: int = 4) -> list[dict[str, Any]]:
-    # Sort newest first by archived_at.
+    """Keep only the newest N archived weeks, based on week_start.
+
+    We prefer week_start over archived_at so retention stays stable even if HA
+    was offline during rollover and archiving happens late.
+    """
+
+    def _wk(x: dict[str, Any]) -> date:
+        try:
+            return date.fromisoformat(str(x.get("week_start") or ""))
+        except Exception:  # noqa: BLE001
+            return date.min
+
     items = [x for x in items if isinstance(x, dict)]
-    items.sort(key=lambda x: str(x.get("archived_at") or ""), reverse=True)
-    return items[: max(0, int(keep))]
+    items.sort(key=_wk, reverse=True)
+
+    # De-dupe by week_start (defensive).
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for it in items:
+        ws = str(it.get("week_start") or "")
+        if not ws or ws in seen:
+            continue
+        seen.add(ws)
+        out.append(it)
+        if len(out) >= max(0, int(keep)):
+            break
+    return out
 
 
 def _new_person(
@@ -181,6 +204,10 @@ class WeeklyTrainingStore:
             )
             self._data.setdefault("history", [])
             self._data.setdefault("updated_at", _now_iso())
+
+            # Always enforce retention on load (keeps archive at 4-week cycles).
+            if isinstance(self._data.get("history"), list):
+                self._data["history"] = _trim_history(self._data["history"], keep=4)
 
             # Normalize custom exercises from older schema.
             cfg = self._data.get("exercise_config")
