@@ -516,8 +516,9 @@ class WeeklyTrainingCard extends HTMLElement {
         .muted { color: var(--secondary-text-color); }
         .top-actions { display:flex; gap: 8px; align-items:center; }
         .top-actions button { font: inherit; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 10px; background: var(--card-background-color); color: var(--primary-text-color); cursor:pointer; }
-        .layout { display:grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
-        @media (min-width: 900px) { .layout { grid-template-columns: 260px 1fr; } }
+        /* Tablet-first: iPad (768px) should show the 2-column layout even in portrait. */
+        .layout { display:grid; grid-template-columns: 1fr; gap: 14px; margin-top: 12px; }
+        @media (min-width: 740px) { .layout { grid-template-columns: minmax(280px, 340px) 1fr; } }
         .days { border: 1px solid var(--divider-color); border-radius: 12px; overflow: hidden; }
         .day {
           width: 100%;
@@ -528,18 +529,19 @@ class WeeklyTrainingCard extends HTMLElement {
           font: inherit;
           border: 0;
           border-bottom: 1px solid var(--divider-color);
-          padding: 12px;
+          padding: 14px 12px;
           background: var(--card-background-color);
           color: var(--primary-text-color);
           cursor: pointer;
           text-align: left;
+          touch-action: manipulation;
         }
         .day:last-child { border-bottom: 0; }
         .day.active { background: var(--secondary-background-color); }
         .day .meta { display:flex; flex-direction:column; gap: 2px; }
         .day .name { font-weight: 600; font-size: 13px; }
         .day .hint2 { font-size: 12px; color: var(--secondary-text-color); }
-        .badge { font-size: 11px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 4px 8px; color: var(--secondary-text-color); }
+        .badge { font-size: 11px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 5px 9px; color: var(--secondary-text-color); }
         .main { border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px; }
         .main h3 { margin: 0 0 6px 0; font-size: 16px; }
         .items { margin-top: 10px; display:flex; flex-direction:column; gap: 8px; }
@@ -608,7 +610,8 @@ class WeeklyTrainingCard extends HTMLElement {
         .modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0,0,0,0.35);
+          /* Use HA/Material scrim color when available (neutral, theme-aware). */
+          background: var(--mdc-dialog-scrim-color, rgba(0,0,0,0.35));
           display:flex;
           align-items:center;
           justify-content:center;
@@ -616,14 +619,14 @@ class WeeklyTrainingCard extends HTMLElement {
           z-index: 999;
         }
         .modal {
-          width: min(720px, 100%);
+          width: min(780px, 100%);
           max-height: min(80vh, 720px);
           overflow: auto;
           background: var(--card-background-color);
           color: var(--primary-text-color);
           border: 1px solid var(--divider-color);
           border-radius: 14px;
-          box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+          box-shadow: 0 14px 40px rgba(0,0,0,0.22);
         }
         .modal-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 12px 12px 0 12px; }
         .modal-title { font-weight: 700; }

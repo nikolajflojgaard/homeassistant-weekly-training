@@ -27,3 +27,10 @@ All notable changes to this project will be documented in this file.
   - Day list on the left + workout detail panel on the right
   - Day click opens a workout popup to generate/replace the session
 - Add card config: `max_width` (e.g. `1100px`)
+
+## 0.1.5 - 2026-02-14
+
+- Tablet-first polish (iPad portrait shows the 2-column layout).
+- More neutral/minimal look:
+  - Use HA theme scrim color for modals (no hard-coded overlay color).
+  - Screenshots updated to a neutral accent color.

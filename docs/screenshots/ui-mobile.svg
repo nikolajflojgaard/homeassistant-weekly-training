@@ -34,7 +34,7 @@
 
     <!-- Selected row -->
     <rect x="16" y="138" width="360" height="64" fill="#f1f5f9" opacity="0.75"/>
-    <rect x="16" y="138" width="4" height="64" fill="#03a9f4"/>
+    <rect x="16" y="138" width="4" height="64" fill="#64748b"/>
 
     <text x="32" y="106" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Mandag</text>
     <text x="32" y="124" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Tap to create</text>
@@ -64,8 +64,7 @@
     <text x="48" y="682" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Pull-Up</text>
     <text x="48" y="702" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">3 x 5</text>
 
-    <rect x="32" y="756" width="200" height="42" rx="12" fill="#03a9f4"/>
+    <rect x="32" y="756" width="200" height="42" rx="12" fill="#64748b"/>
     <text x="58" y="783" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#ffffff">Replace workout</text>
   </g>
 </svg>
-

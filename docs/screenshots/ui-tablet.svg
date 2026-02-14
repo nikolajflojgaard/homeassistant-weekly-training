@@ -47,7 +47,7 @@
 
     <!-- Selected day highlight -->
     <rect x="18" y="146" width="300" height="64" rx="0" fill="#f1f5f9" opacity="0.75"/>
-    <rect x="18" y="146" width="4" height="64" fill="#03a9f4"/>
+    <rect x="18" y="146" width="4" height="64" fill="#64748b"/>
 
     <rect x="18" y="210" width="300" height="64" fill="#ffffff"/>
     <text x="34" y="240" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Onsdag</text>
@@ -96,8 +96,7 @@
     <text x="380" y="364" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Pull-Up</text>
     <text x="380" y="384" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">3 x 5</text>
 
-    <rect x="360" y="516" width="170" height="42" rx="12" fill="#03a9f4"/>
+    <rect x="360" y="516" width="170" height="42" rx="12" fill="#64748b"/>
     <text x="390" y="543" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#ffffff">Replace workout</text>
   </g>
 </svg>
-
