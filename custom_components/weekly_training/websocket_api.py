@@ -13,6 +13,7 @@ from datetime import timedelta
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .version import BACKEND_VERSION
 from .ws_state import public_state
 from .storage import ConflictError
 
@@ -30,6 +31,7 @@ def _runtime_payload() -> dict[str, Any]:
         "today": today.isoformat(),
         "current_week_start": current_week_start,
         "current_week_number": current_week_number,
+        "backend_version": BACKEND_VERSION,
     }
 
 

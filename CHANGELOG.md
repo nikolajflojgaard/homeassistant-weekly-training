@@ -246,3 +246,9 @@ All notable changes to this project will be documented in this file.
   - Upper/Lower (4-day)
 - Cycle (Strength-ish): "Dag C" squat is now explicitly **lighter** than the heavy squat day.
 - Exercise rule: auto-programs avoid **Front Squat** (Back Squat preferred; Pause Squat allowed).
+
+## 0.3.13 - 2026-02-14
+
+- Hardening: show **card/backend version mismatch** in UI and block write actions to prevent stale cached JS from corrupting state.
+- UX: Cycle planner split now **auto-suggests training weekdays** (unless you customize them).
+- Dev: add basic planner tests for split rotation and "no front squat" rule.

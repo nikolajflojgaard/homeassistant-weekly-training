@@ -5,6 +5,8 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
+const CARD_VERSION = "0.3.13";
+
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
     return document.createElement("ha-form");
@@ -122,14 +124,18 @@ class WeeklyTrainingCard extends HTMLElement {
     return 8;
   }
 
-	  async _callWS(payload, _retried) {
-	    if (!this._hass) throw new Error("No hass");
-	    const p = { ...(payload || {}) };
-	    const t = String(p.type || "");
-	    const mutating = t && t !== "weekly_training/get_state" && t !== "weekly_training/get_plan" && t !== "weekly_training/list_entries" && t !== "weekly_training/get_library" && t !== "weekly_training/get_history";
-	    if (mutating && this._state && this._state.rev != null && p.expected_rev == null) {
-	      p.expected_rev = Number(this._state.rev || 1);
-	    }
+		  async _callWS(payload, _retried) {
+		    if (!this._hass) throw new Error("No hass");
+		    const p = { ...(payload || {}) };
+		    const t = String(p.type || "");
+		    const mutating = t && t !== "weekly_training/get_state" && t !== "weekly_training/get_plan" && t !== "weekly_training/list_entries" && t !== "weekly_training/get_library" && t !== "weekly_training/get_history";
+		    if (mutating && this._state && !this._versionsMatch()) {
+		      const b = this._backendVersion();
+		      throw new Error(`Version mismatch: card ${CARD_VERSION} vs backend ${b || "unknown"}. Remove any /local resource and hard refresh.`);
+		    }
+		    if (mutating && this._state && this._state.rev != null && p.expected_rev == null) {
+		      p.expected_rev = Number(this._state.rev || 1);
+		    }
 	    try {
 	      return await this._hass.callWS(p);
 	    } catch (e) {
@@ -155,6 +161,18 @@ class WeeklyTrainingCard extends HTMLElement {
     if (!nextState.runtime && prevRt) nextState.runtime = prevRt;
     this._state = nextState;
     this._applyStateToDraft();
+  }
+
+  _backendVersion() {
+    const rt = this._state && this._state.runtime ? this._state.runtime : {};
+    const v = rt && rt.backend_version ? String(rt.backend_version) : "";
+    return v;
+  }
+
+  _versionsMatch() {
+    const b = this._backendVersion();
+    if (!b) return true; // backend too old or state not loaded yet
+    return String(b) === String(CARD_VERSION);
   }
 
   _captureFocus() {
@@ -1080,11 +1098,12 @@ class WeeklyTrainingCard extends HTMLElement {
     const viewPersonId = String(activeId || defaultPersonId || "");
     const viewPerson = this._personById(viewPersonId);
     const plan = this._planForPerson(viewPersonId);
-    const planningMode = String(this._draft.planning_mode || "auto");
-    const manual = planningMode === "manual";
+	    const planningMode = String(this._draft.planning_mode || "auto");
+	    const manual = planningMode === "manual";
 
-    const runtime = (this._state && this._state.runtime) || {};
-    const weekOffset = this._clampWeekOffset(this._weekOffset);
+	    const runtime = (this._state && this._state.runtime) || {};
+	    const versionsOk = this._versionsMatch();
+	    const weekOffset = this._clampWeekOffset(this._weekOffset);
     const selectedWeekStartIso = this._selectedWeekStartIso(runtime);
     const selectedWeekNumber = this._isoWeekNumberFromWeekStart(selectedWeekStartIso) || Number(runtime.current_week_number || 0);
     const weekStartIso = String(selectedWeekStartIso || ""); // used throughout render
@@ -1800,7 +1819,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		      </div>
 		    ` : "";
 
-		    this.shadowRoot.innerHTML = `
+			    this.shadowRoot.innerHTML = `
 	      <style>
 		        :host {
 		          display:block;
@@ -2403,10 +2422,11 @@ class WeeklyTrainingCard extends HTMLElement {
         }
       </style>
 
-	      <ha-card>
-	        <div class="wrap">
-	          ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
-		          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
+		      <ha-card>
+		        <div class="wrap">
+		          ${!versionsOk ? `<div class="error">Version mismatch: card <b>${this._escape(CARD_VERSION)}</b> vs backend <b>${this._escape(String(this._backendVersion() || ""))}</b>. Remove any <code>/local</code> resource and hard refresh.</div>` : ""}
+		          ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
+			          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
 
 		          <div class="header">
 		            <div class="h-title">${this._escape(String(title || ""))}</div>
@@ -2762,7 +2782,17 @@ class WeeklyTrainingCard extends HTMLElement {
 	    const qCyPerson = this.shadowRoot ? this.shadowRoot.querySelector("#cy-person") : null;
 	    if (qCyPerson) qCyPerson.addEventListener("change", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.person_id = String(e.target.value || ""); });
 	    const qCyProgram = this.shadowRoot ? this.shadowRoot.querySelector("#cy-program") : null;
-	    if (qCyProgram) qCyProgram.addEventListener("change", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.program = String(e.target.value || "full_body_abc"); });
+	    if (qCyProgram) qCyProgram.addEventListener("change", (e) => {
+	      if (!this._ui.cycleDraft) return;
+	      const prog = String(e.target.value || "full_body_abc");
+	      this._ui.cycleDraft.program = prog;
+	      if (!this._ui.cycleDraft._wd_touched) {
+	        if (prog === "upper_lower_4day") this._ui.cycleDraft.training_weekdays = [0, 1, 3, 4];
+	        else if (prog === "full_body_2day") this._ui.cycleDraft.training_weekdays = [0, 3];
+	        else this._ui.cycleDraft.training_weekdays = [0, 2, 4];
+	      }
+	      this._render();
+	    });
 	    const qCyPreset2 = this.shadowRoot ? this.shadowRoot.querySelector("#cy-preset2") : null;
 	    if (qCyPreset2) qCyPreset2.addEventListener("change", (e) => {
 	      if (!this._ui.cycleDraft) return;
@@ -2789,6 +2819,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	        if (!this._ui.cycleDraft) return;
 	        const wd = Number(e.currentTarget.getAttribute("data-cy-wd"));
 	        if (!Number.isFinite(wd)) return;
+	        this._ui.cycleDraft._wd_touched = true;
 	        const cur = Array.isArray(this._ui.cycleDraft.training_weekdays) ? this._ui.cycleDraft.training_weekdays.slice() : [];
 	        const idx = cur.indexOf(wd);
 	        if (idx >= 0) cur.splice(idx, 1);
