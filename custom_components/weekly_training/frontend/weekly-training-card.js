@@ -509,6 +509,7 @@ class WeeklyTrainingCard extends HTMLElement {
     const person = this._personById(pid);
     const cur = (person && person.cycle && typeof person.cycle === "object") ? person.cycle : {};
     const preset = String(cur.preset || "strength");
+    const program = String(cur.program || "full_body_abc");
     const tdays = Array.isArray(cur.training_weekdays) ? cur.training_weekdays.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [0, 2, 4];
     const stepPct = cur.step_pct != null ? Number(cur.step_pct) : 3.0;
     const deloadPct = cur.deload_pct != null ? Number(cur.deload_pct) : 10.0;
@@ -519,6 +520,7 @@ class WeeklyTrainingCard extends HTMLElement {
       start_week_start: String(startWeek || ""),
       weeks: Number.isFinite(weeks) ? weeks : 4,
       preset,
+      program,
       training_weekdays: Array.from(new Set(tdays)).sort((a, b) => a - b),
       step_pct: stepPct,
       deload_pct: deloadPct,
@@ -574,6 +576,7 @@ class WeeklyTrainingCard extends HTMLElement {
       const cycle = {
         enabled: true,
         preset: String(d.preset || "strength"),
+        program: String(d.program || "full_body_abc"),
         start_week_start: startWeekStart,
         training_weekdays: weekdays,
         weeks: Number(d.weeks || 4),
@@ -1372,21 +1375,34 @@ class WeeklyTrainingCard extends HTMLElement {
 	            </div>
 	            <div class="modal-b">
 	              <div class="hint">This will generate workouts for the next <b>${this._escape(String(cycleDraft.weeks || 4))}</b> weeks starting from <b>${this._escape(wkLabel)}</b> (${this._escape(wkRange)}).</div>
-	              <div class="row compact" style="margin-top:10px">
-	                <div>
-	                  <div class="label">Person</div>
-	                  <select data-focus-key="cy_person" id="cy-person" ${saving ? "disabled" : ""}>
+		              <div class="row compact" style="margin-top:10px">
+		                <div>
+		                  <div class="label">Person</div>
+		                  <select data-focus-key="cy_person" id="cy-person" ${saving ? "disabled" : ""}>
 	                    ${people.map((p) => {
 	                      const pid = String((p && p.id) || "");
 	                      const nm = String((p && p.name) || pid);
 	                      if (!pid) return "";
 	                      return `<option value="${this._escape(pid)}" ${pid === String(cycleDraft.person_id || "") ? "selected" : ""}>${this._escape(nm)}</option>`;
 	                    }).join("")}
-	                  </select>
-	                </div>
-	                <div>
-	                  <div class="label">Preset</div>
-	                  <select data-focus-key="cy_preset2" id="cy-preset2" ${saving ? "disabled" : ""}>
+		                  </select>
+		                </div>
+		                <div>
+		                  <div class="label">Split</div>
+		                  <select data-focus-key="cy_program" id="cy-program" ${saving ? "disabled" : ""}>
+		                    ${[
+		                      { v: "full_body_abc", l: "Full body (A/B/C)" },
+		                      { v: "full_body_2day", l: "Full body (2-day)" },
+		                      { v: "upper_lower_4day", l: "Upper/Lower (4-day)" },
+		                    ].map((x) => {
+		                      const cur = String(cycleDraft.program || "full_body_abc");
+		                      return `<option value="${this._escape(x.v)}" ${cur === x.v ? "selected" : ""}>${this._escape(x.l)}</option>`;
+		                    }).join("")}
+		                  </select>
+		                </div>
+		                <div>
+		                  <div class="label">Preset</div>
+		                  <select data-focus-key="cy_preset2" id="cy-preset2" ${saving ? "disabled" : ""}>
 	                    ${[
 	                      { v: "strength", l: "Strength-ish" },
 	                      { v: "hypertrophy", l: "Hypertrophy-ish" },
@@ -2745,6 +2761,8 @@ class WeeklyTrainingCard extends HTMLElement {
 	    });
 	    const qCyPerson = this.shadowRoot ? this.shadowRoot.querySelector("#cy-person") : null;
 	    if (qCyPerson) qCyPerson.addEventListener("change", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.person_id = String(e.target.value || ""); });
+	    const qCyProgram = this.shadowRoot ? this.shadowRoot.querySelector("#cy-program") : null;
+	    if (qCyProgram) qCyProgram.addEventListener("change", (e) => { if (this._ui.cycleDraft) this._ui.cycleDraft.program = String(e.target.value || "full_body_abc"); });
 	    const qCyPreset2 = this.shadowRoot ? this.shadowRoot.querySelector("#cy-preset2") : null;
 	    if (qCyPreset2) qCyPreset2.addEventListener("change", (e) => {
 	      if (!this._ui.cycleDraft) return;

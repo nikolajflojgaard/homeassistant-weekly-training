@@ -35,6 +35,7 @@ from .const import (
 
 _STORAGE_VERSION = 1
 DEFAULT_CYCLE_PRESET = "strength"
+DEFAULT_CYCLE_PROGRAM = "full_body_abc"
 DEFAULT_CYCLE_STEP_PCT = 2.5
 DEFAULT_CYCLE_DELOAD_PCT = 10.0
 DEFAULT_CYCLE_DELOAD_VOL = 0.65
@@ -214,6 +215,7 @@ class WeeklyTrainingStore:
                     "cycle": {
                         "enabled": False,
                         "preset": DEFAULT_CYCLE_PRESET,  # strength | hypertrophy | minimalist
+                        "program": DEFAULT_CYCLE_PROGRAM,  # full_body_abc | full_body_2day | upper_lower_4day
                         "start_week_start": "",  # ISO date for Monday (YYYY-MM-DD); if empty, auto = current week when enabled
                         "training_weekdays": [0, 2, 4],  # Mon/Wed/Fri default when enabled
                         "weeks": 4,
@@ -299,7 +301,7 @@ class WeeklyTrainingStore:
                             p["cycle"] = dict(legacy)
                             break
                     # Clear legacy to avoid cross-person bleed.
-                    overrides["cycle"] = {"enabled": False, "preset": DEFAULT_CYCLE_PRESET, "start_week_start": "", "training_weekdays": [0, 2, 4], "weeks": 4, "step_pct": DEFAULT_CYCLE_STEP_PCT, "deload_pct": DEFAULT_CYCLE_DELOAD_PCT, "deload_volume": DEFAULT_CYCLE_DELOAD_VOL}
+                    overrides["cycle"] = {"enabled": False, "preset": DEFAULT_CYCLE_PRESET, "program": DEFAULT_CYCLE_PROGRAM, "start_week_start": "", "training_weekdays": [0, 2, 4], "weeks": 4, "step_pct": DEFAULT_CYCLE_STEP_PCT, "deload_pct": DEFAULT_CYCLE_DELOAD_PCT, "deload_volume": DEFAULT_CYCLE_DELOAD_VOL}
                     self._data["overrides"] = overrides
 
             # Prune expired per-person cycles (only keep one active cycle per person).
@@ -521,6 +523,9 @@ class WeeklyTrainingStore:
             preset = str(cycle.get("preset") or "").strip().lower()
             if preset in {"strength", "hypertrophy", "minimalist"}:
                 cur["preset"] = preset
+            program = str(cycle.get("program") or "").strip().lower()
+            if program in {"full_body_abc", "full_body_2day", "upper_lower_4day"}:
+                cur["program"] = program
             if cycle.get("start_week_start") is not None:
                 cur["start_week_start"] = str(cycle.get("start_week_start") or "").strip()
             tw = cycle.get("training_weekdays")
@@ -559,6 +564,8 @@ class WeeklyTrainingStore:
                 cur["enabled"] = False
             if "preset" not in cur:
                 cur["preset"] = DEFAULT_CYCLE_PRESET
+            if "program" not in cur:
+                cur["program"] = DEFAULT_CYCLE_PROGRAM
             if "start_week_start" not in cur:
                 cur["start_week_start"] = ""
             if "training_weekdays" not in cur or not isinstance(cur.get("training_weekdays"), list):

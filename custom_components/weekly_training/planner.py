@@ -127,6 +127,7 @@ def _cycle_slot_for_day(
     week_start_day: date,
     weekday: int,
     training_weekdays: list[int],
+    slots: list[str],
 ) -> str | None:
     """Return A/B/C rotation slot for a cycle day.
 
@@ -141,13 +142,15 @@ def _cycle_slot_for_day(
         return None
     if weekday not in training_weekdays:
         return None
+    if not slots:
+        return None
     try:
         delta_weeks = int(round((week_start_day - start_week_start).days / 7))
         if delta_weeks < 0:
             return None
         idx_in_week = training_weekdays.index(int(weekday))
         seq = delta_weeks * len(training_weekdays) + idx_in_week
-        return ["A", "B", "C"][seq % 3]
+        return slots[seq % len(slots)]
     except Exception:  # noqa: BLE001
         return None
 
@@ -221,6 +224,9 @@ def generate_session(
     cycle_preset = str(cycle_cfg.get("preset") or "strength").strip().lower()
     if cycle_preset not in {"strength", "hypertrophy", "minimalist"}:
         cycle_preset = "strength"
+    cycle_program = str(cycle_cfg.get("program") or "full_body_abc").strip().lower()
+    if cycle_program not in {"full_body_abc", "full_body_2day", "upper_lower_4day"}:
+        cycle_program = "full_body_abc"
     try:
         cycle_step_pct = float(cycle_cfg.get("step_pct")) if cycle_cfg.get("step_pct") is not None else 2.5
     except Exception:  # noqa: BLE001
@@ -395,11 +401,19 @@ def generate_session(
             cleaned.sort()
             training_weekdays = cleaned
 
+    rot_slots: list[str] = ["A", "B", "C"]
+    if cycle_program == "full_body_2day":
+        rot_slots = ["A", "B"]
+    elif cycle_program == "upper_lower_4day":
+        # U/L split with separate squat and deadlift lower days.
+        rot_slots = ["U", "L", "U", "D"]
+
     slot = _cycle_slot_for_day(
         start_week_start=start_week_start if cycle_enabled else None,
         week_start_day=week_start_day,
         weekday=int(weekday),
         training_weekdays=training_weekdays,
+        slots=rot_slots,
     ) or _slot_for_weekday(int(weekday))
     slot_key = slot.lower()
 
@@ -420,11 +434,18 @@ def generate_session(
             ex_name = str(ex.get("name") or "").strip().lower()
             if ex_name and ex_name in disabled:
                 continue
+            # Hard preference: avoid front squats in auto programs.
+            if "front squat" in ex_name:
+                continue
             if disallow_tags and not tags_for(str(ex.get("name") or "")).isdisjoint(disallow_tags):
                 continue
             if _matches_preferences(ex, ctx):
                 return ex
-        return _pick_one(library, tags_any=tags_any, ctx=ctx, fallback_tags_any=fallback_tags_any)
+        picked = _pick_one(library, tags_any=tags_any, ctx=ctx, fallback_tags_any=fallback_tags_any)
+        if isinstance(picked, dict) and "front squat" in str(picked.get("name") or "").strip().lower():
+            # Retry without squat tags to escape a "front squat" heavy library.
+            picked = _pick_one(library, tags_any=set(), ctx=ctx, fallback_tags_any=fallback_tags_any)
+        return picked
 
     def _apply_deload_sr(sr: str) -> str:
         if not is_deload:
@@ -434,7 +455,8 @@ def generate_session(
         return _format_sets_reps(s, r)
 
     # Lower: A/B are main lower, C is more single-leg by default.
-    use_strength_abc = cycle_enabled and cycle_preset == "strength" and (slot in {"A", "B", "C"}) and (int(weekday) in training_weekdays) and planning_mode != "manual"
+    use_cycle_templates = cycle_enabled and (int(weekday) in training_weekdays) and planning_mode != "manual"
+    use_strength_templates = use_cycle_templates and cycle_preset == "strength"
 
     lower = {}
     push = {}
@@ -443,8 +465,8 @@ def generate_session(
     core = {}
     items_spec: list[tuple[str, dict[str, Any], str]] | None = None
 
-    if use_strength_abc:
-        # Strength-ish: A/B/C templates (no squat+deadlift in same session; bench can pair).
+    if use_strength_templates and cycle_program in {"full_body_abc", "full_body_2day"}:
+        # Strength-ish full body templates (no squat+deadlift in same session; bench can pair).
         if slot == "A":
             lower = _pick_named_or_tags(names=["Back Squat", "Squat"], tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
             push = _pick_named_or_tags(names=["Bench Press", "Barbell Bench Press"], tags_any={"bench", "press", "push"}, fallback_tags_any={"push"})
@@ -469,7 +491,13 @@ def generate_session(
             ]
         else:
             # C
-            lower = _pick_named_or_tags(names=["Back Squat", "Squat"], tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
+            # Prefer back squat (or pause squat). Never auto-pick front squat.
+            lower = _pick_named_or_tags(
+                names=["Pause Squat", "Back Squat", "Squat"],
+                tags_any={"squat"},
+                fallback_tags_any={"leg"},
+                disallow_tags=disallow_deadlift,
+            )
             push = _pick_named_or_tags(
                 names=["Close-Grip Bench Press", "Close Grip Bench Press", "Close-Grip Bench", "Bench Press"],
                 tags_any={"bench", "press", "push"},
@@ -479,11 +507,44 @@ def generate_session(
             accessory = _pick_named_or_tags(names=["Hammer Curl", "Dumbbell Hammer Curl", "Curl"], tags_any={"arms"}, fallback_tags_any={"arms"})
             core = _pick_named_or_tags(names=["Ab Wheel Rollout", "Ab Wheel", "Rollout"], tags_any={"core"}, fallback_tags_any={"core"})
             items_spec = [
-                ("main_lower", lower, _apply_deload_sr("3 x 6")),
+                # Light squat day: explicitly mark as light so loads come out lower.
+                ("main_lower_light", lower, _apply_deload_sr("3 x 6")),
                 ("main_push", push, _apply_deload_sr("3 x 8")),
                 ("accessory", pull, _apply_deload_sr("3 x 10")),
                 ("accessory_2", accessory, _apply_deload_sr("3 x 10")),
                 ("core", core, _apply_deload_sr("3 x 8")),
+            ]
+    elif use_strength_templates and cycle_program == "upper_lower_4day":
+        # Upper/Lower 4-day templates. Lower days split squat vs deadlift.
+        if slot == "U":
+            push = _pick_named_or_tags(names=["Bench Press", "Barbell Bench Press"], tags_any={"bench", "push", "press"}, fallback_tags_any={"push"})
+            pull = _pick_named_or_tags(names=["Barbell Row", "Bent-Over Row", "Row"], tags_any={"row", "pull"}, fallback_tags_any={"pull"})
+            accessory = _pick_named_or_tags(names=["Dumbbell Shoulder Press", "DB Shoulder Press", "Overhead Press"], tags_any={"shoulders", "press"}, fallback_tags_any={"shoulders"})
+            core = _pick_named_or_tags(names=["Hanging Leg Raise", "Ab Wheel Rollout", "Plank"], tags_any={"core"}, fallback_tags_any={"core"})
+            items_spec = [
+                ("main_push", push, _apply_deload_sr("4 x 5")),
+                ("main_pull", pull, _apply_deload_sr("4 x 6")),
+                ("accessory", accessory, _apply_deload_sr("3 x 10")),
+                ("core", core, _apply_deload_sr("3 x 10")),
+            ]
+        elif slot == "L":
+            lower = _pick_named_or_tags(names=["Back Squat", "Pause Squat", "Squat"], tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
+            accessory = _pick_named_or_tags(names=["Bulgarian Split Squat", "Split Squat", "Lunge"], tags_any={"lunge", "single_leg"}, fallback_tags_any={"leg"})
+            core = _pick_named_or_tags(names=["Ab Wheel Rollout", "Hanging Leg Raise", "Plank"], tags_any={"core"}, fallback_tags_any={"core"})
+            items_spec = [
+                ("main_lower", lower, _apply_deload_sr("4 x 5")),
+                ("accessory", accessory, _apply_deload_sr("3 x 10")),
+                ("core", core, _apply_deload_sr("3 x 10")),
+            ]
+        else:
+            # D = deadlift lower day
+            lower = _pick_named_or_tags(names=["Deadlift", "Conventional Deadlift"], tags_any={"deadlift", "hinge"}, fallback_tags_any={"hinge"}, disallow_tags=disallow_squat)
+            accessory = _pick_named_or_tags(names=["Romanian Deadlift", "Hip Thrust", "Good Morning"], tags_any={"hinge"}, fallback_tags_any={"hinge"})
+            core = _pick_named_or_tags(names=["Plank", "Ab Wheel Rollout"], tags_any={"core"}, fallback_tags_any={"core"})
+            items_spec = [
+                ("main_lower", lower, _apply_deload_sr("4 x 4")),
+                ("accessory", accessory, _apply_deload_sr("3 x 8")),
+                ("core", core, _apply_deload_sr("3 x 45")),
             ]
     else:
         # Default generator behavior (auto or manual per-slot picking).
@@ -541,6 +602,11 @@ def generate_session(
         else:
             main_pct = 0.75
 
+        # Program-specific adjustments.
+        # "main_lower_light" is used for the lighter squat day (e.g., Dag C).
+        if kind == "main_lower_light":
+            main_pct = main_pct * 0.92
+
         # Apply 4-week cycle if enabled, otherwise fall back to linear "plan ahead" progression.
         if cycle_enabled:
             try:
@@ -597,7 +663,16 @@ def generate_session(
     for kind, ex, sr in (items_spec or []):
         items.append(_item(kind, str((ex or {}).get("name") or ""), sr))
 
-    workout_name = f"Dag {slot}" if (cycle_enabled and int(weekday) in training_weekdays and slot in {"A", "B", "C"}) else f"Full Body {slot}"
+    workout_name = f"Full Body {slot}"
+    if cycle_enabled and int(weekday) in training_weekdays:
+        if slot in {"A", "B", "C"}:
+            workout_name = f"Dag {slot}"
+        elif slot == "U":
+            workout_name = "Upper"
+        elif slot == "L":
+            workout_name = "Lower (Squat)"
+        elif slot == "D":
+            workout_name = "Lower (Deadlift)"
     workout = {
         "name": workout_name,
         "date": session_date_iso,
@@ -607,6 +682,8 @@ def generate_session(
         "cycle": {
             "enabled": cycle_enabled,
             "preset": cycle_preset,
+            "program": cycle_program,
+            "slot": slot,
             "week_index": int(cycle_index),  # 0..3
             "is_deload": bool(is_deload),
         },

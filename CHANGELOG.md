@@ -237,3 +237,12 @@ All notable changes to this project will be documented in this file.
 ## 0.3.11 - 2026-02-14
 
 - Cycle (Strength-ish): planned workouts now follow an **A/B/C rotation** (instead of repeating the same day template), matching a more realistic weekly program structure.
+
+## 0.3.12 - 2026-02-14
+
+- Cycle: add **Split** selection (per-person) with multiple programs:
+  - Full body (A/B/C)
+  - Full body (2-day)
+  - Upper/Lower (4-day)
+- Cycle (Strength-ish): "Dag C" squat is now explicitly **lighter** than the heavy squat day.
+- Exercise rule: auto-programs avoid **Front Squat** (Back Squat preferred; Pause Squat allowed).
