@@ -21,6 +21,15 @@ def _iso_week_number(day_value: date) -> int:
     return int(day_value.isocalendar().week)
 
 
+def _effective_today_local() -> date:
+    """Match the UI rollover rule: new week starts Monday 01:00 (local time)."""
+    now = dt_util.as_local(dt_util.utcnow())
+    today = now.date()
+    if now.weekday() == 0 and now.hour < 1:
+        today = today - timedelta(days=1)
+    return today
+
+
 def _csv_set(raw: str) -> set[str]:
     return {part.strip().lower() for part in str(raw or "").split(",") if part.strip()}
 
@@ -141,6 +150,12 @@ def generate_session(
     overrides = overrides or {}
     planning_mode = str(overrides.get("planning_mode") or "auto").lower()
     intensity = str(overrides.get("intensity") or "normal").lower()
+    prog_cfg = overrides.get("progression") if isinstance(overrides.get("progression"), dict) else {}
+    prog_enabled = bool(prog_cfg.get("enabled")) if isinstance(prog_cfg.get("enabled"), bool) else True
+    try:
+        prog_step_pct = float(prog_cfg.get("step_pct")) if prog_cfg.get("step_pct") is not None else 2.5
+    except Exception:  # noqa: BLE001
+        prog_step_pct = 2.5
     session_overrides = overrides.get("session_overrides") if isinstance(overrides.get("session_overrides"), dict) else {}
     if not isinstance(session_overrides, dict):
         session_overrides = {}
@@ -289,6 +304,18 @@ def generate_session(
             main_pct = 0.80
         else:
             main_pct = 0.75
+
+        # Apply progression based on week offset from the current week (UI-aligned).
+        if prog_enabled and prog_step_pct:
+            try:
+                current_monday = _week_start(_effective_today_local())
+                offset_weeks = int(round((week_start_day - current_monday).days / 7))
+                factor = 1.0 + (float(prog_step_pct) / 100.0) * float(offset_weeks)
+                # Clamp to avoid nonsense suggestions.
+                factor = max(0.85, min(1.20, factor))
+                main_pct = main_pct * factor
+            except Exception:  # noqa: BLE001
+                pass
         # Simple heuristics. In real life you'd track more lifts.
         if "squat" in name:
             base = max_sq
@@ -332,6 +359,7 @@ def generate_session(
         "date": session_date_iso,
         "weekday": int(weekday),
         "intensity": intensity,
+        "progression": {"enabled": prog_enabled, "step_pct": prog_step_pct},
         "items": items,
     }
 

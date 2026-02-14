@@ -171,3 +171,12 @@ All notable changes to this project will be documented in this file.
   - Adding a custom exercise updates the grouped grid immediately (no need to Save + reopen).
   - Custom list action renamed to **Delete** and styled red.
 - UI: popup buttons now use consistent pill styling matching the rest of the UI (Delete stays red).
+
+## 0.2.9 - 2026-02-14
+
+- Week navigation:
+  - Week header now has arrows to browse up to **3 weeks back/forward**.
+  - Tap the week chip to jump back to the current week.
+  - Week selection is calendar-driven (not tied to a person).
+- Progression:
+  - When planning future weeks, suggested loads for main lifts automatically increase week-to-week (default **+2.5% / week**).

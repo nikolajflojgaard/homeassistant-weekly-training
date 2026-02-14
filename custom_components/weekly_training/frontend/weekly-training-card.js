@@ -303,14 +303,48 @@ class WeeklyTrainingCard extends HTMLElement {
     return this._colorFor(pid || "default");
   }
 
+  _clampWeekOffset(value) {
+    const v = Number(value);
+    if (!Number.isFinite(v)) return 0;
+    return Math.max(-3, Math.min(3, Math.trunc(v)));
+  }
+
+  _selectedWeekStartIso(runtime) {
+    const currentWeekStart = String((runtime && runtime.current_week_start) || "");
+    if (!currentWeekStart) return "";
+    try {
+      const ws = new Date(currentWeekStart + "T00:00:00Z");
+      ws.setUTCDate(ws.getUTCDate() + (this._clampWeekOffset(this._weekOffset) * 7));
+      return ws.toISOString().slice(0, 10);
+    } catch (_) {
+      return currentWeekStart.slice(0, 10);
+    }
+  }
+
+  _isoWeekNumberFromWeekStart(weekStartIso) {
+    const iso = String(weekStartIso || "").slice(0, 10);
+    if (!iso) return 0;
+    try {
+      // ISO week number algorithm (UTC).
+      const d0 = new Date(iso + "T00:00:00Z");
+      const d = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate()));
+      // Thursday in current week decides the year.
+      d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
+      const week1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+      return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getUTCDay() + 6) % 7)) / 7);
+    } catch (_) {
+      return 0;
+    }
+  }
+
   _planForPerson(personId) {
     const plans = this._state && this._state.plans && typeof this._state.plans === "object" ? this._state.plans : {};
     const id = String(personId || "");
     const personPlans = (id && plans[id] && typeof plans[id] === "object") ? plans[id] : {};
     const runtime = (this._state && this._state.runtime) || {};
-    const currentWeekStart = String(runtime.current_week_start || "");
-    if (!currentWeekStart) return null;
-    const key = currentWeekStart.slice(0, 10);
+    const selectedWeekStart = this._selectedWeekStartIso(runtime);
+    if (!selectedWeekStart) return null;
+    const key = selectedWeekStart.slice(0, 10);
     return personPlans[key] || null;
   }
 
@@ -352,6 +386,39 @@ class WeeklyTrainingCard extends HTMLElement {
 	        },
 	      };
       const res = await this._callWS(payload);
+      this._applyState((res && res.state) || this._state);
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  async _setWeekOffset(newOffset) {
+    this._captureFocus();
+    const next = this._clampWeekOffset(newOffset);
+    if (next === this._clampWeekOffset(this._weekOffset)) return;
+
+    // Update UI selection to something sensible when browsing other weeks.
+    const runtime = (this._state && this._state.runtime) || {};
+    const todayIso = String(runtime.today || "");
+    const todayW = todayIso ? new Date(todayIso + "T00:00:00Z").getUTCDay() : null;
+    const todayWeekday = todayW == null ? 0 : ((todayW + 6) % 7);
+    const defaultDay = next === 0 ? Number(todayWeekday) : 0; // Monday for non-current weeks
+    this._ui.selectedDay = defaultDay;
+    this._selectedWeekday = defaultDay;
+    this._weekOffset = next;
+
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      const res = await this._callWS({
+        type: "weekly_training/set_overrides",
+        entry_id: this._entryId,
+        overrides: { week_offset: Number(next), selected_weekday: this._selectedWeekday },
+      });
       this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
@@ -694,15 +761,19 @@ class WeeklyTrainingCard extends HTMLElement {
     const manual = planningMode === "manual";
 
     const runtime = (this._state && this._state.runtime) || {};
-    const currentWeekNumber = Number(runtime.current_week_number || 0);
-    const weekStartIso = String(runtime.current_week_start || "");
-    const weekLabel = currentWeekNumber ? `Week ${currentWeekNumber}` : "Week";
+    const weekOffset = this._clampWeekOffset(this._weekOffset);
+    const selectedWeekStartIso = this._selectedWeekStartIso(runtime);
+    const selectedWeekNumber = this._isoWeekNumberFromWeekStart(selectedWeekStartIso) || Number(runtime.current_week_number || 0);
+    const weekStartIso = String(selectedWeekStartIso || ""); // used throughout render
+    const weekLabel = selectedWeekNumber ? `Week ${selectedWeekNumber}` : "Week";
     const weekRange = weekStartIso ? this._formatWeekRange(weekStartIso) : "";
+    const weekDelta = weekOffset ? (weekOffset > 0 ? `+${weekOffset}` : `${weekOffset}`) : "";
 
     const todayIso = String(runtime.today || "");
     const todayW = todayIso ? new Date(todayIso + "T00:00:00Z").getUTCDay() : null;
     const todayWeekday = todayW == null ? 0 : ((todayW + 6) % 7);
-    const selectedDay = this._ui.selectedDay != null ? Number(this._ui.selectedDay) : Number(todayWeekday);
+    const defaultSelectedDay = weekOffset === 0 ? Number(todayWeekday) : 0;
+    const selectedDay = this._ui.selectedDay != null ? Number(this._ui.selectedDay) : defaultSelectedDay;
 
     const activeName = viewPerson ? String(viewPerson.name || "") : "";
 
@@ -1239,10 +1310,38 @@ class WeeklyTrainingCard extends HTMLElement {
 		          border: 1px solid var(--wt-border);
 		          border-radius: var(--wt-radius-sm);
 		          background: var(--wt-surface);
-		          padding: 10px 12px;
+		          padding: 6px;
 		          min-width: 190px;
+		          display: grid;
+		          grid-template-columns: 40px 1fr 40px;
+		          gap: 6px;
+		          align-items: center;
 		        }
+		        .wkbtn, .wkcenter {
+		          border: 1px solid var(--wt-border);
+		          background: var(--card-background-color);
+		          border-radius: 12px;
+		          height: 42px;
+		          color: var(--primary-text-color);
+		        }
+		        .wkbtn {
+		          display:flex;
+		          align-items:center;
+		          justify-content:center;
+		          cursor: pointer;
+		          transition: transform 90ms ease, filter 120ms ease;
+		        }
+		        .wkbtn:active { transform: scale(0.98); }
+		        .wkbtn[disabled] { opacity: 0.55; cursor: default; }
+		        .wkbtn ha-icon { color: var(--wt-text2); }
+		        .wkcenter {
+		          text-align: left;
+		          padding: 6px 10px;
+		          cursor: pointer;
+		        }
+		        .wkcenter[disabled] { opacity: 0.8; cursor: default; }
 	        .wk { font-size: 13px; font-weight: 800; line-height: 1.1; }
+	        .wkdelta { font-size: 12px; color: var(--wt-text2); font-weight: 700; }
 	        .range { font-size: 12px; color: var(--wt-text2); margin-top: 3px; }
 	        .gearbtn {
 	          width: 44px;
@@ -1752,8 +1851,16 @@ class WeeklyTrainingCard extends HTMLElement {
 		            ${onboarding}
 		            <div class="topbar" aria-label="Header">
 		              <div class="weekpill" aria-label="Week">
-		                <div class="wk">${this._escape(weekLabel)}</div>
-		                <div class="range">${this._escape(weekRange || "")}</div>
+		                <button class="wkbtn" id="wk-prev" title="Previous week" ${saving || loading || weekOffset <= -3 ? "disabled" : ""}>
+		                  <ha-icon icon="mdi:chevron-left"></ha-icon>
+		                </button>
+		                <button class="wkcenter" id="wk-reset" title="${weekOffset === 0 ? "Current week" : "Back to current week"}" ${saving || loading ? "disabled" : ""}>
+		                  <div class="wk">${this._escape(weekLabel)}${weekDelta ? ` <span class="wkdelta">(${this._escape(weekDelta)})</span>` : ""}</div>
+		                  <div class="range">${this._escape(weekRange || "")}</div>
+		                </button>
+		                <button class="wkbtn" id="wk-next" title="Next week" ${saving || loading || weekOffset >= 3 ? "disabled" : ""}>
+		                  <ha-icon icon="mdi:chevron-right"></ha-icon>
+		                </button>
 		              </div>
 
 		              <div class="toppeople" aria-label="People list">
@@ -1784,7 +1891,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		                const w = w0 && w0.completed ? null : w0;
 		                const entries = allByDay[idx] || [];
 		                const activeCls = idx === selectedDay ? "active" : "";
-		                const isToday = idx === todayWeekday;
+		                const isToday = weekOffset === 0 && idx === todayWeekday;
 		                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
 		                const small = w ? (w.completed ? "Completed" : String(w.name || "Session")) : "Tap to add";
 		                return `
@@ -1909,6 +2016,12 @@ class WeeklyTrainingCard extends HTMLElement {
 	    // Wire events (header)
 		    const qSettings = this.shadowRoot ? this.shadowRoot.querySelector("#settings") : null;
 		    if (qSettings) qSettings.addEventListener("click", () => { this._openSettingsModal(); });
+	    const qWkPrev = this.shadowRoot ? this.shadowRoot.querySelector("#wk-prev") : null;
+	    if (qWkPrev) qWkPrev.addEventListener("click", () => { this._setWeekOffset(this._clampWeekOffset(this._weekOffset) - 1); });
+	    const qWkNext = this.shadowRoot ? this.shadowRoot.querySelector("#wk-next") : null;
+	    if (qWkNext) qWkNext.addEventListener("click", () => { this._setWeekOffset(this._clampWeekOffset(this._weekOffset) + 1); });
+	    const qWkReset = this.shadowRoot ? this.shadowRoot.querySelector("#wk-reset") : null;
+	    if (qWkReset) qWkReset.addEventListener("click", () => { if (this._clampWeekOffset(this._weekOffset) !== 0) this._setWeekOffset(0); });
 	    const qOnPeople = this.shadowRoot ? this.shadowRoot.querySelector("#on-people") : null;
 	    if (qOnPeople) qOnPeople.addEventListener("click", () => { this._openPersonModal(""); });
 	    const qPersonAdd = this.shadowRoot ? this.shadowRoot.querySelector("#person-add") : null;

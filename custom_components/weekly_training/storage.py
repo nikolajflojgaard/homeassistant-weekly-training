@@ -179,6 +179,8 @@ class WeeklyTrainingStore:
                     "duration_minutes": None,
                     "preferred_exercises": "",
                     "planning_mode": "auto",  # auto | manual
+                    # Progression applies a per-week % adjustment to suggested loads for main lifts.
+                    "progression": {"enabled": True, "step_pct": 2.5},
                     "session_overrides": {
                         "a_lower": "",
                         "a_push": "",
@@ -188,7 +190,7 @@ class WeeklyTrainingStore:
                         "b_pull": "",
                         "c_lower": "",
                         "c_push": "",
-                        "c_pull": ""
+                        "c_pull": "",
                     },
                 },
             )
@@ -304,15 +306,27 @@ class WeeklyTrainingStore:
         if person_id not in ids:
             return state
         state["active_person_id"] = person_id
-        # Reset overrides to per-person defaults on change.
+        # Reset overrides to per-person defaults on change, but preserve week navigation.
+        # The calendar is not person-specific.
+        prev_overrides = state.get("overrides") if isinstance(state, dict) else None
+        if not isinstance(prev_overrides, dict):
+            prev_overrides = {}
+        keep_week_offset = int(prev_overrides.get("week_offset") or 0)
+        keep_selected_weekday = prev_overrides.get("selected_weekday")
+        keep_selected_weekday = int(keep_selected_weekday) if keep_selected_weekday is not None else None
+        keep_progression = prev_overrides.get("progression")
+        if not isinstance(keep_progression, dict):
+            keep_progression = {"enabled": True, "step_pct": 2.5}
+
         person = next((p for p in people if isinstance(p, dict) and str(p.get("id")) == person_id), None)
         if isinstance(person, dict):
             state["overrides"] = {
-                "week_offset": 0,
-                "selected_weekday": None,
+                "week_offset": keep_week_offset,
+                "selected_weekday": keep_selected_weekday,
                 "duration_minutes": int(person.get("duration_minutes") or DEFAULT_DURATION_MINUTES),
                 "preferred_exercises": str(person.get("preferred_exercises") or ""),
                 "planning_mode": "auto",
+                "progression": keep_progression,
                 "session_overrides": {
                     "a_lower": "",
                     "a_push": "",
@@ -322,7 +336,7 @@ class WeeklyTrainingStore:
                     "b_pull": "",
                     "c_lower": "",
                     "c_push": "",
-                    "c_pull": ""
+                    "c_pull": "",
                 },
             }
         return await self.async_save(state)
@@ -337,6 +351,7 @@ class WeeklyTrainingStore:
         planning_mode: str | None = None,
         session_overrides: dict[str, str] | None = None,
         intensity: str | None = None,
+        progression: dict[str, Any] | None = None,
         expected_rev: int | None = None,
     ) -> dict[str, Any]:
         state = await self.async_load()
@@ -349,6 +364,7 @@ class WeeklyTrainingStore:
                 "duration_minutes": None,
                 "preferred_exercises": "",
                 "planning_mode": "auto",
+                "progression": {"enabled": True, "step_pct": 2.5},
                 "session_overrides": {},
             }
         if week_offset is not None:
@@ -363,6 +379,22 @@ class WeeklyTrainingStore:
             overrides["planning_mode"] = str(planning_mode or "auto").lower()
         if intensity is not None:
             overrides["intensity"] = str(intensity or "normal").lower()
+        if progression is not None:
+            cur = overrides.get("progression")
+            if not isinstance(cur, dict):
+                cur = {}
+            if isinstance(progression.get("enabled"), bool):
+                cur["enabled"] = bool(progression.get("enabled"))
+            if progression.get("step_pct") is not None:
+                try:
+                    cur["step_pct"] = float(progression.get("step_pct"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if "enabled" not in cur:
+                cur["enabled"] = True
+            if "step_pct" not in cur:
+                cur["step_pct"] = 2.5
+            overrides["progression"] = cur
         if session_overrides is not None:
             current = overrides.get("session_overrides")
             if not isinstance(current, dict):

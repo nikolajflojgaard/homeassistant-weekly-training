@@ -14,6 +14,8 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
   - Editable person color
 - Weekly canvas:
   - `Week X` is shown at the top
+  - Browse up to **3 weeks back/forward** using the week arrows (tap the week chip to jump back to the current week)
+  - Suggested loads progress automatically week-to-week when planning ahead (default: **+2.5% / week** on main lift suggestions)
   - Pick a day from the left list and generate that day's session in a popup
   - New week starts blank (generate again)
   - Week rollover happens at **Monday 01:00** (local time)
