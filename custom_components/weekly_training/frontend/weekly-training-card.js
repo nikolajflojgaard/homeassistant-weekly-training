@@ -391,6 +391,21 @@ class WeeklyTrainingCard extends HTMLElement {
           font-size: 12px;
           color: var(--secondary-text-color);
         }
+        .weekbar { display:flex; align-items:center; justify-content:space-between; gap: 8px; flex-wrap:wrap; }
+        .weeknav { display:flex; gap:8px; align-items:center; }
+        .weeknav button { width: 38px; height: 38px; padding: 0; }
+        .daybar { display:flex; gap:6px; flex-wrap:wrap; margin-top: 10px; }
+        .daybtn {
+          height: 34px;
+          min-width: 44px;
+          border-radius: 999px;
+          border: 1px solid var(--divider-color);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          cursor: pointer;
+        }
+        .daybtn.active { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color) inset; }
+        .daybtn.today { box-shadow: 0 0 0 1px rgba(3, 169, 244, 0.35) inset; }
       </style>
 
       <ha-card header="${this._escape(title)}">
@@ -447,7 +462,7 @@ class WeeklyTrainingCard extends HTMLElement {
               </div>
 
               <div class="actions" style="margin-top: 12px">
-                <button class="primary" id="generate" ${saving || loading ? "disabled" : ""}>Generate weekly plan</button>
+                <button class="primary" id="generate" ${saving || loading ? "disabled" : ""}>Generate session</button>
                 <button id="save" ${saving || loading ? "disabled" : ""}>Save settings</button>
                 <button id="reload" ${saving ? "disabled" : ""}>Reload</button>
               </div>
@@ -592,18 +607,3 @@ class WeeklyTrainingCard extends HTMLElement {
 }
 
 customElements.define("weekly-training-card", WeeklyTrainingCard);
-        .weekbar { display:flex; align-items:center; justify-content:space-between; gap: 8px; flex-wrap:wrap; }
-        .weeknav { display:flex; gap:8px; align-items:center; }
-        .weeknav button { width: 38px; height: 38px; padding: 0; }
-        .daybar { display:flex; gap:6px; flex-wrap:wrap; margin-top: 10px; }
-        .daybtn {
-          height: 34px;
-          min-width: 44px;
-          border-radius: 999px;
-          border: 1px solid var(--divider-color);
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
-          cursor: pointer;
-        }
-        .daybtn.active { border-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color)); }
-        .daybtn.today { box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 35%, transparent) inset; }

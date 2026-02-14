@@ -14,3 +14,7 @@ All notable changes to this project will be documented in this file.
 ## 0.1.2 - 2026-02-14
 
 - Fix: register frontend card + websocket/services from `async_setup_entry` as well (more reliable in config-entry-only setups).
+
+## 0.1.3 - 2026-02-14
+
+- Fix: card JS syntax error (stray CSS after `customElements.define`), which could prevent the custom element from registering.
