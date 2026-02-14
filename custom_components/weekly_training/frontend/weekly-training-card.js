@@ -534,15 +534,36 @@ class WeeklyTrainingCard extends HTMLElement {
     const personId = String(d.person_id || "");
     // Always plan from the currently selected week (calendar-driven, not person-driven).
     // Some older UI states can have an empty draft start_week_start even though the header shows a valid week.
-    const rt = (this._state && this._state.runtime) || {};
-    const startWeekStart = String(this._selectedWeekStartIso(rt) || d.start_week_start || "").slice(0, 10);
+    let rt = (this._state && this._state.runtime) || {};
+    let startWeekStart = String(this._selectedWeekStartIso(rt) || d.start_week_start || "").slice(0, 10);
     const weeks = Number(d.weeks || 4);
     const weekdays = Array.isArray(d.training_weekdays) ? d.training_weekdays : [];
-    if (!personId || !startWeekStart || !weekdays.length) return;
-    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(startWeekStart)) {
-      this._error = "start_week_start must be an ISO date (YYYY-MM-DD)";
-      this._render();
-      return;
+    if (!personId || !weekdays.length) return;
+    const isIsoDate = (s) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(String(s || ""));
+    if (!isIsoDate(startWeekStart)) {
+      // Try to self-heal by reloading state (can fix stale runtime payload).
+      try {
+        await this._reloadState();
+      } catch (_) {}
+      rt = (this._state && this._state.runtime) || rt || {};
+      startWeekStart = String(this._selectedWeekStartIso(rt) || d.start_week_start || "").slice(0, 10);
+    }
+    if (!isIsoDate(startWeekStart)) {
+      // Last-resort fallback: compute Monday from local time (01:00 rollover),
+      // and apply current week_offset. Backend is tolerant too, but we prefer
+      // persisting a stable ISO date for planned markers.
+      try {
+        const now = new Date();
+        const localWeekday = (now.getDay() + 6) % 7; // Mon=0..Sun=6
+        const effective = new Date(now.getTime());
+        if (localWeekday === 0 && now.getHours() < 1) effective.setDate(effective.getDate() - 1);
+        const effWeekday = (effective.getDay() + 6) % 7;
+        effective.setHours(0, 0, 0, 0);
+        effective.setDate(effective.getDate() - effWeekday + (this._clampWeekOffset(this._weekOffset) * 7));
+        startWeekStart = new Date(Date.UTC(effective.getFullYear(), effective.getMonth(), effective.getDate())).toISOString().slice(0, 10);
+      } catch (_) {
+        startWeekStart = "";
+      }
     }
 
     this._saving = true;

@@ -225,3 +225,7 @@ All notable changes to this project will be documented in this file.
 ## 0.3.8 - 2026-02-14
 
 - Fix (hardening): bulk cycle planning (`generate_cycle`) now tolerates empty/invalid `start_week_start` and falls back to the currently selected week.
+
+## 0.3.9 - 2026-02-14
+
+- Fix (hardening): cycle planner no longer blocks planning if the start week date is stale/missing; it auto-reloads state and computes a safe fallback date.
