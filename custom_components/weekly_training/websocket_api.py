@@ -475,6 +475,7 @@ async def ws_generate_plan(
         vol.Required("start_week_start"): str,  # ISO date for Monday (YYYY-MM-DD)
         vol.Optional("weeks"): vol.Coerce(int),
         vol.Optional("weekdays"): list,  # 0..6 (Mon..Sun)
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -522,6 +523,16 @@ async def ws_generate_cycle(
     if not weekdays:
         connection.send_error(msg["id"], "invalid", "weekdays must include at least one day (0..6)")
         return
+
+    # Optional optimistic concurrency check (single check only; we write multiple times below).
+    expected_rev = msg.get("expected_rev")
+    if expected_rev is not None:
+        state0 = await coordinator.store.async_load()
+        try:
+            coordinator.store._assert_rev(state0, expected_rev)  # noqa: SLF001
+        except ConflictError as e:
+            connection.send_error(msg["id"], "conflict", str(e))
+            return
 
     # Coordinator offsets are relative to its effective "current Monday" (Monday 01:00 rule).
     current_monday = coordinator._week_start_for_offset(0)  # noqa: SLF001

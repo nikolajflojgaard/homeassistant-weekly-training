@@ -275,7 +275,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._draft.duration_minutes = Number(overrides.duration_minutes != null ? overrides.duration_minutes : 45);
     this._draft.preferred_exercises = String(overrides.preferred_exercises || "");
     this._draft.progression = (overrides.progression && typeof overrides.progression === "object") ? { ...overrides.progression } : { enabled: true, step_pct: 2.5 };
-    this._draft.cycle = (overrides.cycle && typeof overrides.cycle === "object") ? { ...overrides.cycle } : { enabled: false, preset: "strength", start_week_start: "", training_weekdays: [0, 2, 4], step_pct: 2.5, deload_pct: 10, deload_volume: 0.65 };
+    this._draft.cycle = (overrides.cycle && typeof overrides.cycle === "object") ? { ...overrides.cycle } : { enabled: false, preset: "strength", start_week_start: "", training_weekdays: [0, 2, 4], weeks: 4, step_pct: 2.5, deload_pct: 10, deload_volume: 0.65 };
     this._draft.session_overrides = { ...this._draft.session_overrides, ...(overrides.session_overrides || {}) };
 
     const people = Array.isArray(st.people) ? st.people : [];
@@ -352,20 +352,26 @@ class WeeklyTrainingCard extends HTMLElement {
   }
 
   _cycleIndexForWeekStart(cycle, weekStartIso) {
-    if (!cycle || typeof cycle !== "object") return { enabled: false, index: 0, is_deload: false };
-    if (!cycle.enabled) return { enabled: false, index: 0, is_deload: false };
+    if (!cycle || typeof cycle !== "object") return { enabled: false, in_window: false, index: 0, is_deload: false, delta_weeks: 0 };
+    if (!cycle.enabled) return { enabled: false, in_window: false, index: 0, is_deload: false, delta_weeks: 0 };
     const start = String(cycle.start_week_start || "").slice(0, 10);
     const wk = String(weekStartIso || "").slice(0, 10);
-    if (!wk) return { enabled: true, index: 0, is_deload: false };
+    if (!wk || !start) return { enabled: false, in_window: false, index: 0, is_deload: false, delta_weeks: 0 };
+    const windowWeeks = (() => {
+      const n = Number(cycle.weeks != null ? cycle.weeks : 4);
+      if (!Number.isFinite(n)) return 4;
+      return Math.max(1, Math.min(12, Math.trunc(n)));
+    })();
     try {
-      const startIso = start || wk;
-      const a = new Date(startIso + "T00:00:00Z");
+      const a = new Date(start + "T00:00:00Z");
       const b = new Date(wk + "T00:00:00Z");
       const weeks = Math.round((b.getTime() - a.getTime()) / (7 * 24 * 3600 * 1000));
+      const inWindow = weeks >= 0 && weeks < windowWeeks;
+      if (!inWindow) return { enabled: false, in_window: false, index: 0, is_deload: false, delta_weeks: weeks };
       const idx = ((weeks % 4) + 4) % 4;
-      return { enabled: true, index: idx, is_deload: idx === 3 };
+      return { enabled: true, in_window: true, index: idx, is_deload: idx === 3, delta_weeks: weeks };
     } catch (_) {
-      return { enabled: true, index: 0, is_deload: false };
+      return { enabled: false, in_window: false, index: 0, is_deload: false, delta_weeks: 0 };
     }
   }
 
@@ -528,6 +534,7 @@ class WeeklyTrainingCard extends HTMLElement {
         preset: String(d.preset || "strength"),
         start_week_start: startWeekStart,
         training_weekdays: weekdays,
+        weeks: Number(d.weeks || 4),
         step_pct: Number(d.step_pct || 0),
         deload_pct: Number(d.deload_pct || 0),
         deload_volume: Number(d.deload_volume || 0.65),
@@ -2400,7 +2407,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		                const entries = allByDay[idx] || [];
 		                const activeCls = idx === selectedDay ? "active" : "";
 		                const isToday = weekOffset === 0 && idx === todayWeekday;
-		                const isPlanned = cycleInfo.enabled && trainingDays.includes(idx);
+		                const isPlanned = cycleInfo.in_window && trainingDays.includes(idx);
 		                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
 		                const small = w ? (w.completed ? "Completed" : String(w.name || "Session")) : "Tap to add";
 		                return `

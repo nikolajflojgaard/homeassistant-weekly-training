@@ -205,3 +205,8 @@ All notable changes to this project will be documented in this file.
 
 - Cycle planner:
   - Add **Clear planned** (removes planned markers only, does not delete workouts).
+
+## 0.3.5 - 2026-02-14
+
+- Fix: cycle planning now works again (WS `generate_cycle` accepts `expected_rev`).
+- Fix: **Planned** markers only show from the cycle start week and forward (not backwards), limited to the configured cycle window.

@@ -200,6 +200,7 @@ class WeeklyTrainingStore:
                         "preset": DEFAULT_CYCLE_PRESET,  # strength | hypertrophy | minimalist
                         "start_week_start": "",  # ISO date for Monday (YYYY-MM-DD); if empty, auto = current week when enabled
                         "training_weekdays": [0, 2, 4],  # Mon/Wed/Fri default when enabled
+                        "weeks": 4,
                         "step_pct": DEFAULT_CYCLE_STEP_PCT,
                         "deload_pct": DEFAULT_CYCLE_DELOAD_PCT,
                         "deload_volume": DEFAULT_CYCLE_DELOAD_VOL,
@@ -353,6 +354,7 @@ class WeeklyTrainingStore:
                 "preset": DEFAULT_CYCLE_PRESET,
                 "start_week_start": "",
                 "training_weekdays": [0, 2, 4],
+                "weeks": 4,
                 "step_pct": DEFAULT_CYCLE_STEP_PCT,
                 "deload_pct": DEFAULT_CYCLE_DELOAD_PCT,
                 "deload_volume": DEFAULT_CYCLE_DELOAD_VOL,
@@ -412,6 +414,7 @@ class WeeklyTrainingStore:
                     "preset": DEFAULT_CYCLE_PRESET,
                     "start_week_start": "",
                     "training_weekdays": [0, 2, 4],
+                    "weeks": 4,
                     "step_pct": DEFAULT_CYCLE_STEP_PCT,
                     "deload_pct": DEFAULT_CYCLE_DELOAD_PCT,
                     "deload_volume": DEFAULT_CYCLE_DELOAD_VOL,
@@ -469,6 +472,11 @@ class WeeklyTrainingStore:
                         cleaned.append(xi)
                 cleaned.sort()
                 cur["training_weekdays"] = cleaned
+            if cycle.get("weeks") is not None:
+                try:
+                    cur["weeks"] = int(cycle.get("weeks"))
+                except Exception:  # noqa: BLE001
+                    pass
             if cycle.get("step_pct") is not None:
                 try:
                     cur["step_pct"] = float(cycle.get("step_pct"))
@@ -492,6 +500,12 @@ class WeeklyTrainingStore:
                 cur["start_week_start"] = ""
             if "training_weekdays" not in cur or not isinstance(cur.get("training_weekdays"), list):
                 cur["training_weekdays"] = [0, 2, 4]
+            if "weeks" not in cur:
+                cur["weeks"] = 4
+            try:
+                cur["weeks"] = max(1, min(12, int(cur.get("weeks") or 4)))
+            except Exception:  # noqa: BLE001
+                cur["weeks"] = 4
             if "step_pct" not in cur:
                 cur["step_pct"] = DEFAULT_CYCLE_STEP_PCT
             if "deload_pct" not in cur:
