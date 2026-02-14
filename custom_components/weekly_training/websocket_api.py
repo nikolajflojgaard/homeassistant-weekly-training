@@ -537,10 +537,19 @@ async def ws_generate_cycle(
         return
 
     try:
-        start_week_start = date.fromisoformat(str(msg.get("start_week_start") or "").strip())
+        raw_start = str(msg.get("start_week_start") or "").strip()
+        start_week_start = date.fromisoformat(raw_start)
     except Exception:  # noqa: BLE001
-        connection.send_error(msg["id"], "invalid", "start_week_start must be an ISO date (YYYY-MM-DD)")
-        return
+        # Be tolerant: if the UI sends an empty/invalid date (stale frontend/cache),
+        # fall back to the currently selected week based on stored week_offset.
+        try:
+            state0 = await coordinator.store.async_load()
+            overrides0 = state0.get("overrides", {}) if isinstance(state0, dict) else {}
+            week_offset0 = int(overrides0.get("week_offset") or 0) if isinstance(overrides0, dict) else 0
+            start_week_start = coordinator._week_start_for_offset(week_offset0)  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            connection.send_error(msg["id"], "invalid", "start_week_start must be an ISO date (YYYY-MM-DD)")
+            return
 
     weeks = int(msg.get("weeks") or 4)
     weeks = max(1, min(12, weeks))
