@@ -6,7 +6,7 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
 
 ## Features
 
-- People profiles (male/female), per-person defaults and 1RM maxes:
+- People profiles (male/female), per-person defaults and 1RM maxes (edit from the header avatars):
   - Squat (SQ), Deadlift (DL), Bench Press (BP)
 - Weekly canvas:
   - `Week X` is shown at the top (week switching comes later)
@@ -15,6 +15,9 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
 - Choose planning mode:
   - `Auto`: let the generator pick exercises
   - `Manual`: optionally choose exercises for that session
+- Exercise settings (gear icon):
+  - Disable built-in exercises you don't want suggested
+  - Add custom exercises (name + tags + equipment)
 - Rule enforcement:
   - If you pick Squat, the generator will not suggest Deadlift (and vice versa)
   - Bench can be paired with either

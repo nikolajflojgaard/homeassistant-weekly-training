@@ -4,6 +4,7 @@ State model (schema v1):
 - people: list of people profiles (gender, defaults, 1RM maxes, preferences)
 - active_person_id: which person the UI controls target by default
 - overrides: per-entry generation overrides (week offset/day + duration/preferred + planning mode + session picks)
+- exercise_config: exercise list overrides (disable built-ins, add custom exercises)
 - plans: mapping person_id -> mapping week_start -> plan payload
 """
 
@@ -103,6 +104,15 @@ class WeeklyTrainingStore:
                 },
             )
             self._data.setdefault("plans", {})
+            self._data.setdefault(
+                "exercise_config",
+                {
+                    # If non-empty: these exercise names are excluded from auto-picks and manual picks.
+                    "disabled_exercises": [],
+                    # List of custom exercise dicts {name,tags,equipment} to be merged into the library.
+                    "custom_exercises": [],
+                },
+            )
             self._data.setdefault("updated_at", _now_iso())
 
             # Seed one default person for first-run UX.
@@ -118,6 +128,59 @@ class WeeklyTrainingStore:
                 self._data["active_person_id"] = next(iter(ids), "")
 
         return dict(self._data)
+
+    async def async_set_exercise_config(
+        self,
+        *,
+        disabled_exercises: list[str] | None = None,
+        custom_exercises: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        state = await self.async_load()
+        cfg = state.get("exercise_config") if isinstance(state, dict) else None
+        if not isinstance(cfg, dict):
+            cfg = {"disabled_exercises": [], "custom_exercises": []}
+
+        if disabled_exercises is not None:
+            cleaned = []
+            for n in disabled_exercises:
+                s = str(n or "").strip()
+                if s:
+                    cleaned.append(s)
+            # De-dupe, stable order
+            seen: set[str] = set()
+            unique = []
+            for n in cleaned:
+                if n in seen:
+                    continue
+                seen.add(n)
+                unique.append(n)
+            cfg["disabled_exercises"] = unique
+
+        if custom_exercises is not None:
+            normalized: list[dict[str, Any]] = []
+            for ex in custom_exercises:
+                if not isinstance(ex, dict):
+                    continue
+                name = str(ex.get("name") or "").strip()
+                if not name:
+                    continue
+                tags = ex.get("tags") or []
+                equipment = ex.get("equipment") or []
+                if not isinstance(tags, list):
+                    tags = []
+                if not isinstance(equipment, list):
+                    equipment = []
+                normalized.append(
+                    {
+                        "name": name,
+                        "tags": [str(t).strip().lower() for t in tags if str(t).strip()],
+                        "equipment": [str(t).strip().lower() for t in equipment if str(t).strip()],
+                    }
+                )
+            cfg["custom_exercises"] = normalized
+
+        state["exercise_config"] = cfg
+        return await self.async_save(state)
 
     async def async_save(self, state: dict[str, Any]) -> dict[str, Any]:
         next_state = dict(state or {})

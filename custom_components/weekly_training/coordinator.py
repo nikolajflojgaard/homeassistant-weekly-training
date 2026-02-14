@@ -77,6 +77,23 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             overrides = {}
 
         library = await self.library.async_load()
+        # Merge any user-added custom exercises into the library for generation,
+        # and pass disabled list down as an override.
+        cfg = state.get("exercise_config") if isinstance(state, dict) else {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+        disabled = cfg.get("disabled_exercises", [])
+        if isinstance(disabled, list):
+            overrides = dict(overrides)
+            overrides["disabled_exercises"] = disabled
+        custom = cfg.get("custom_exercises", [])
+        if isinstance(custom, list) and custom:
+            merged = dict(library)
+            exercises = merged.get("exercises", [])
+            if not isinstance(exercises, list):
+                exercises = []
+            merged["exercises"] = [*exercises, *[e for e in custom if isinstance(e, dict)]]
+            library = merged
         people = state.get("people", []) if isinstance(state, dict) else []
         active_id = str(person_id or state.get("active_person_id") or "")
         person = next((p for p in people if isinstance(p, dict) and str(p.get("id") or "") == active_id), None)

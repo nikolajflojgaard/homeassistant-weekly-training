@@ -38,3 +38,11 @@ All notable changes to this project will be documented in this file.
 ## 0.1.6 - 2026-02-14
 
 - UI fix: the card always fills the available Lovelace column width (no auto-centering).
+
+## 0.1.7 - 2026-02-14
+
+- Header redesign (tablet-first):
+  - Week bar with date range (week switching disabled for now)
+  - Persistent people avatars in the header (click to edit/update/delete)
+  - Gear icon opens exercise settings (disable built-ins + add custom exercises)
+- Exercise settings are stored in HA storage and applied to session generation.

@@ -29,10 +29,13 @@ def _csv_set(raw: str) -> set[str]:
 class PickContext:
     equipment: set[str]
     preferred: set[str]
+    disabled: set[str]
 
 
 def _matches_preferences(ex: dict[str, Any], ctx: PickContext) -> bool:
     name = str(ex.get("name") or "").strip().lower()
+    if name and name in ctx.disabled:
+        return False
     tags = {str(t).strip().lower() for t in (ex.get("tags") or []) if str(t).strip()}
     equipment = {str(t).strip().lower() for t in (ex.get("equipment") or []) if str(t).strip()}
 
@@ -145,12 +148,22 @@ def generate_session(
     duration = int(profile.get("duration_minutes") or 45)
     preferred = _csv_set(profile.get("preferred_exercises") or "")
     equipment = _csv_set(profile.get("equipment") or "")
+    disabled = set()
+    dis = overrides.get("exercise_config") if isinstance(overrides.get("exercise_config"), dict) else None
+    # Backwards/compat: allow disabled_exercises at top-level of overrides too.
+    disabled_raw = None
+    if isinstance(dis, dict):
+        disabled_raw = dis.get("disabled_exercises")
+    if disabled_raw is None:
+        disabled_raw = overrides.get("disabled_exercises")
+    if isinstance(disabled_raw, list):
+        disabled = {str(n or "").strip().lower() for n in disabled_raw if str(n or "").strip()}
     units = str(profile.get("units") or "kg").lower()
     maxes = profile.get("maxes") if isinstance(profile.get("maxes"), dict) else {}
     max_sq = float(maxes.get("squat") or 0)
     max_dl = float(maxes.get("deadlift") or 0)
     max_bp = float(maxes.get("bench") or 0)
-    ctx = PickContext(equipment=equipment, preferred=preferred)
+    ctx = PickContext(equipment=equipment, preferred=preferred, disabled=disabled)
 
     # Rep ranges: keep simple, slight variation by gender purely as defaults.
     main_reps = "3 x 5" if gender == "male" else "3 x 6"
@@ -207,6 +220,8 @@ def generate_session(
     ) -> dict[str, Any]:
         chosen = str(session_overrides.get(slot_key) or "").strip()
         if planning_mode == "manual" and chosen and chosen in by_name:
+            if str(chosen).strip().lower() in disabled:
+                chosen = ""
             t = tags_for(chosen)
             if disallow_tags and not t.isdisjoint(disallow_tags):
                 pass

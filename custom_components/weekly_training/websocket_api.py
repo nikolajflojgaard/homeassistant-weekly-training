@@ -16,6 +16,58 @@ from .const import DOMAIN
 from .ws_state import public_state
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/get_library",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_get_library(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    state = await coordinator.store.async_load()
+    cfg = state.get("exercise_config") if isinstance(state, dict) else {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+
+    lib = await coordinator.library.async_load()
+    exercises = lib.get("exercises", [])
+    if not isinstance(exercises, list):
+        exercises = []
+    custom = cfg.get("custom_exercises", [])
+    if isinstance(custom, list):
+        exercises = [*exercises, *[e for e in custom if isinstance(e, dict)]]
+
+    # Keep payload minimal: name + tags + equipment
+    payload = []
+    for ex in exercises:
+        if not isinstance(ex, dict):
+            continue
+        name = str(ex.get("name") or "").strip()
+        if not name:
+            continue
+        tags = ex.get("tags") if isinstance(ex.get("tags"), list) else []
+        equipment = ex.get("equipment") if isinstance(ex.get("equipment"), list) else []
+        payload.append(
+            {
+                "name": name,
+                "tags": [str(t).strip().lower() for t in tags if str(t).strip()],
+                "equipment": [str(t).strip().lower() for t in equipment if str(t).strip()],
+            }
+        )
+
+    payload.sort(key=lambda e: str(e.get("name") or "").lower())
+    connection.send_result(msg["id"], {"entry_id": entry_id, "exercises": payload})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "weekly_training/list_entries"})
 @websocket_api.async_response
 async def ws_list_entries(
@@ -117,6 +169,13 @@ async def ws_set_overrides(
         planning_mode=raw.get("planning_mode"),
         session_overrides=raw.get("session_overrides") if isinstance(raw.get("session_overrides"), dict) else None,
     )
+    # Optional: exercise config updates piggybacked here (UI convenience).
+    if "exercise_config" in raw and isinstance(raw.get("exercise_config"), dict):
+        cfg = raw.get("exercise_config") or {}
+        state = await coordinator.store.async_set_exercise_config(
+            disabled_exercises=cfg.get("disabled_exercises") if isinstance(cfg.get("disabled_exercises"), list) else None,
+            custom_exercises=cfg.get("custom_exercises") if isinstance(cfg.get("custom_exercises"), list) else None,
+        )
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
 
@@ -226,3 +285,4 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_delete_person)
     websocket_api.async_register_command(hass, ws_get_plan)
     websocket_api.async_register_command(hass, ws_generate_plan)
+    websocket_api.async_register_command(hass, ws_get_library)

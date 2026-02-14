@@ -65,11 +65,18 @@ class WeeklyTrainingCard extends HTMLElement {
 
     // UI state (purely client-side).
     this._ui = {
-      showPeople: false,
+      showPeople: false, // person editor modal
+      editPersonId: "",
+      showSettings: false,
+      settingsQuery: "",
       showWorkout: false,
       workoutDay: null, // 0..6
       selectedDay: null, // 0..6
     };
+
+    // Cached exercise library payload (from backend).
+    this._library = null;
+    this._settingsDraft = null;
   }
 
   setConfig(config) {
@@ -259,6 +266,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._captureFocus();
     const name = String(this._newPerson.name || "").trim();
     if (!name) return;
+    const editId = String(this._ui.editPersonId || "").trim();
     this._saving = true;
     this._error = "";
     this._render();
@@ -267,6 +275,7 @@ class WeeklyTrainingCard extends HTMLElement {
         type: "weekly_training/add_person",
         entry_id: this._entryId,
         person: {
+          ...(editId ? { id: editId } : {}),
           name,
           gender: String(this._newPerson.gender || "male"),
           units: String(this._newPerson.units || "kg"),
@@ -282,7 +291,92 @@ class WeeklyTrainingCard extends HTMLElement {
       });
       this._state = res?.state || this._state;
       this._newPerson.name = "";
+      this._ui.editPersonId = "";
+      this._ui.showPeople = false;
       this._applyStateToDraft();
+    } catch (e) {
+      this._error = String(e?.message || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  _openPersonModal(personId) {
+    const pid = String(personId || "");
+    const people = this._people();
+    const p = people.find((x) => String(x?.id || "") === pid) || null;
+    if (p) {
+      const maxes = p.maxes || {};
+      this._ui.editPersonId = pid;
+      this._newPerson = {
+        name: String(p.name || ""),
+        gender: String(p.gender || "male"),
+        units: String(p.units || "kg"),
+        duration_minutes: Number(p.duration_minutes || 45),
+        preferred_exercises: String(p.preferred_exercises || ""),
+        equipment: String(p.equipment || "bodyweight, dumbbell, barbell, band"),
+        max_squat: Number(maxes.squat || 0),
+        max_deadlift: Number(maxes.deadlift || 0),
+        max_bench: Number(maxes.bench || 0),
+      };
+    } else {
+      this._ui.editPersonId = "";
+      // keep defaults but clear name
+      this._newPerson.name = "";
+    }
+    this._ui.showPeople = true;
+    this._render();
+  }
+
+  async _ensureLibrary() {
+    if (this._library) return;
+    try {
+      const res = await this._callWS({ type: "weekly_training/get_library", entry_id: this._entryId });
+      this._library = Array.isArray(res?.exercises) ? res.exercises : [];
+    } catch (e) {
+      // Non-fatal: settings modal can still render without the list.
+      this._library = [];
+    }
+  }
+
+  async _openSettingsModal() {
+    await this._ensureLibrary();
+    const cfg = this._state?.exercise_config && typeof this._state.exercise_config === "object" ? this._state.exercise_config : {};
+    const disabled = Array.isArray(cfg.disabled_exercises) ? cfg.disabled_exercises : [];
+    const custom = Array.isArray(cfg.custom_exercises) ? cfg.custom_exercises : [];
+    this._settingsDraft = {
+      disabled: new Set(disabled.map((n) => String(n || "").trim()).filter(Boolean)),
+      custom: custom.filter((e) => e && typeof e === "object"),
+      query: "",
+      new_custom: { name: "", tags: "", equipment: "" },
+    };
+    this._ui.showSettings = true;
+    this._render();
+  }
+
+  async _saveExerciseConfig() {
+    if (!this._settingsDraft) return;
+    const disabled = Array.from(this._settingsDraft.disabled || []).filter(Boolean);
+    const custom = Array.isArray(this._settingsDraft.custom) ? this._settingsDraft.custom : [];
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      const res = await this._callWS({
+        type: "weekly_training/set_overrides",
+        entry_id: this._entryId,
+        overrides: {
+          exercise_config: {
+            disabled_exercises: disabled,
+            custom_exercises: custom,
+          },
+        },
+      });
+      this._state = res?.state || this._state;
+      this._applyStateToDraft();
+      this._ui.showSettings = false;
+      this._settingsDraft = null;
     } catch (e) {
       this._error = String(e?.message || e);
     } finally {
@@ -366,28 +460,15 @@ class WeeklyTrainingCard extends HTMLElement {
     const maxWidthRaw = String(this._config?.max_width || "").trim();
     const maxWidthCss = maxWidthRaw ? this._cssSize(maxWidthRaw) : "";
 
+    const isEditPerson = Boolean(String(this._ui.editPersonId || "").trim());
     const peopleModal = this._ui.showPeople ? `
       <div class="modal-backdrop" id="people-backdrop" aria-hidden="false">
         <div class="modal" role="dialog" aria-label="People">
           <div class="modal-h">
-            <div class="modal-title">People</div>
+            <div class="modal-title">${isEditPerson ? "Edit person" : "Add person"}</div>
             <button class="icon-btn" id="people-close" title="Close">\u00d7</button>
           </div>
           <div class="modal-b">
-            <div class="label">Active person</div>
-            <div class="chiprow">
-              ${people.map((p) => {
-                const pid = String(p?.id || "");
-                const nm = String(p?.name || "");
-                const initial = (nm || "?").slice(0, 1).toUpperCase();
-                const active = pid === activeId;
-                return `<button class="chip ${active ? "active" : ""}" data-person="${this._escape(pid)}" ${saving ? "disabled" : ""}><span class="avatar">${this._escape(initial)}</span>${this._escape(nm || pid)}</button>`;
-              }).join("")}
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="label">Add person</div>
             <div class="row compact">
               <div>
                 <div class="label">Name</div>
@@ -441,8 +522,9 @@ class WeeklyTrainingCard extends HTMLElement {
             </div>
 
             <div class="actions" style="margin-top:12px">
-              <button class="primary" id="p-add" ${saving || !String(this._newPerson.name || "").trim() ? "disabled" : ""}>Add person</button>
-              ${activeId ? `<button id="p-delete" ${saving ? "disabled" : ""}>Delete active</button>` : ""}
+              <button class="primary" id="p-save" ${saving || !String(this._newPerson.name || "").trim() ? "disabled" : ""}>Save</button>
+              ${isEditPerson && String(this._ui.editPersonId || "") !== String(activeId || "") ? `<button id="p-set-active" ${saving ? "disabled" : ""}>Set active</button>` : ""}
+              ${isEditPerson ? `<button id="p-delete" ${saving ? "disabled" : ""}>Delete</button>` : ""}
             </div>
           </div>
         </div>
@@ -505,6 +587,88 @@ class WeeklyTrainingCard extends HTMLElement {
       </div>
     ` : "";
 
+    const settingsModal = this._ui.showSettings ? (() => {
+      const draft = this._settingsDraft || { disabled: new Set(), custom: [], query: "", new_custom: { name: "", tags: "", equipment: "" } };
+      const q = String(draft.query || "").trim().toLowerCase();
+      const exercises = Array.isArray(this._library) ? this._library : [];
+      const filtered = q ? exercises.filter((e) => String(e?.name || "").toLowerCase().includes(q)) : exercises;
+
+      const custom = Array.isArray(draft.custom) ? draft.custom : [];
+      return `
+        <div class="modal-backdrop" id="settings-backdrop" aria-hidden="false">
+          <div class="modal" role="dialog" aria-label="Exercise settings">
+            <div class="modal-h">
+              <div class="modal-title">Exercise settings</div>
+              <button class="icon-btn" id="settings-close" title="Close">\u00d7</button>
+            </div>
+            <div class="modal-b">
+              <div class="hint">Disable exercises you don't want suggested. You can also add your own custom exercises.</div>
+
+              <div style="margin-top:10px">
+                <div class="label">Search</div>
+                <input id="s-query" type="text" placeholder="Search exercise..." value="${this._escape(String(draft.query || ""))}" ${saving ? "disabled" : ""} />
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="label">Exercises</div>
+              <div class="xlist" id="xlist">
+                ${filtered.slice(0, 300).map((ex) => {
+                  const name = String(ex?.name || "").trim();
+                  if (!name) return "";
+                  const disabled = draft.disabled && typeof draft.disabled.has === "function" ? draft.disabled.has(name) : false;
+                  const tags = Array.isArray(ex?.tags) ? ex.tags.slice(0, 4).join(", ") : "";
+                  return `
+                    <label class="xrow">
+                      <input class="xcheck" type="checkbox" data-ex="${this._escape(name)}" ${disabled ? "" : "checked"} ${saving ? "disabled" : ""}/>
+                      <span class="xname">${this._escape(name)}</span>
+                      <span class="xtags">${this._escape(tags)}</span>
+                    </label>
+                  `;
+                }).join("")}
+                ${filtered.length > 300 ? `<div class="hint">Showing first 300 results. Use search to narrow.</div>` : ""}
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="label">Custom exercises</div>
+              ${custom.length ? `
+                <div class="xlist">
+                  ${custom.map((ex, idx) => {
+                    const nm = String(ex?.name || "");
+                    return `<div class="xcustom"><div>${this._escape(nm)}</div><button class="icon-btn" data-custom-del="${idx}" ${saving ? "disabled" : ""}>Remove</button></div>`;
+                  }).join("")}
+                </div>
+              ` : `<div class="muted">No custom exercises yet.</div>`}
+
+              <div class="row compact" style="margin-top:10px">
+                <div>
+                  <div class="label">Name</div>
+                  <input id="c-name" type="text" placeholder="e.g. Ring Row" value="${this._escape(String(draft.new_custom?.name || ""))}" ${saving ? "disabled" : ""}/>
+                </div>
+                <div>
+                  <div class="label">Tags (CSV)</div>
+                  <input id="c-tags" type="text" placeholder="pull, row" value="${this._escape(String(draft.new_custom?.tags || ""))}" ${saving ? "disabled" : ""}/>
+                </div>
+                <div>
+                  <div class="label">Equipment (CSV)</div>
+                  <input id="c-eq" type="text" placeholder="bodyweight, band" value="${this._escape(String(draft.new_custom?.equipment || ""))}" ${saving ? "disabled" : ""}/>
+                </div>
+              </div>
+              <div class="actions" style="margin-top:10px">
+                <button id="c-add" ${saving ? "disabled" : ""}>Add custom exercise</button>
+              </div>
+
+              <div class="actions" style="margin-top:12px">
+                <button class="primary" id="s-save" ${saving ? "disabled" : ""}>Save</button>
+                <button id="s-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    })() : "";
+
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; }
@@ -515,12 +679,77 @@ class WeeklyTrainingCard extends HTMLElement {
           ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
         }
         .wrap { padding: 12px; }
-        .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
-        .title { font-size: 18px; font-weight: 600; }
-        .sub { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
         .muted { color: var(--secondary-text-color); }
-        .top-actions { display:flex; gap: 8px; align-items:center; }
-        .top-actions button { font: inherit; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 10px; background: var(--card-background-color); color: var(--primary-text-color); cursor:pointer; }
+        .header { display:flex; flex-direction:column; gap: 10px; }
+        .h-title { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+        .h-row { display:flex; align-items:center; justify-content:space-between; gap: 12px; }
+        .weekctrl { display:flex; align-items:center; gap: 10px; }
+        .navbtn {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          border: 1px solid var(--divider-color);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          cursor: not-allowed;
+          opacity: 0.7;
+        }
+        .weekpill {
+          border: 1px solid var(--divider-color);
+          border-radius: 12px;
+          background: var(--card-background-color);
+          padding: 8px 12px;
+          min-width: 150px;
+        }
+        .wk { font-size: 13px; font-weight: 700; }
+        .range { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
+        .gearbtn {
+          width: 42px;
+          height: 38px;
+          border-radius: 12px;
+          border: 1px solid var(--divider-color);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          cursor: pointer;
+        }
+        .peoplebar {
+          border: 1px dashed var(--divider-color);
+          border-radius: 12px;
+          padding: 10px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 10px;
+          background: var(--card-background-color);
+        }
+        .peoplelabel { font-size: 13px; font-weight: 700; color: var(--primary-text-color); }
+        .peoplechips { display:flex; gap: 8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
+        .pchip {
+          border: 1px solid var(--divider-color);
+          border-radius: 999px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          padding: 6px 10px;
+          display:flex;
+          align-items:center;
+          gap: 8px;
+          cursor: pointer;
+          font: inherit;
+        }
+        .pchip.active { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color) inset; }
+        .pcircle {
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          color: #fff;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .pname { font-size: 13px; }
+        .pchip.add { padding: 6px 12px; font-weight: 800; }
         /* Tablet-first: iPad (768px) should show the 2-column layout even in portrait. */
         .layout { display:grid; grid-template-columns: 1fr; gap: 14px; margin-top: 12px; }
         @media (min-width: 740px) { .layout { grid-template-columns: minmax(280px, 340px) 1fr; } }
@@ -549,6 +778,25 @@ class WeeklyTrainingCard extends HTMLElement {
         .badge { font-size: 11px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 5px 9px; color: var(--secondary-text-color); }
         .main { border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px; }
         .main h3 { margin: 0 0 6px 0; font-size: 16px; }
+        .empty-main {
+          min-height: 360px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding: 12px;
+        }
+        .empty-card {
+          width: min(460px, 100%);
+          border: 1px dashed var(--divider-color);
+          border-radius: 14px;
+          padding: 18px 16px;
+          text-align: center;
+          color: var(--secondary-text-color);
+          background: var(--card-background-color);
+          cursor: pointer;
+        }
+        .empty-title { font-size: 14px; font-weight: 700; color: var(--primary-text-color); }
+        .empty-sub { margin-top: 6px; font-size: 12px; color: var(--secondary-text-color); }
         .items { margin-top: 10px; display:flex; flex-direction:column; gap: 8px; }
         .item { border: 1px solid var(--divider-color); border-radius: 12px; padding: 10px; background: var(--card-background-color); }
         .item .ex { font-weight: 600; }
@@ -636,6 +884,14 @@ class WeeklyTrainingCard extends HTMLElement {
         .modal-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 12px 12px 0 12px; }
         .modal-title { font-weight: 700; }
         .modal-b { padding: 12px; }
+        .xlist { border: 1px solid var(--divider-color); border-radius: 12px; overflow: auto; max-height: 360px; }
+        .xrow { display:flex; gap: 10px; align-items:center; padding: 10px; border-bottom: 1px solid var(--divider-color); }
+        .xrow:last-child { border-bottom: 0; }
+        .xcheck { width: 18px; height: 18px; }
+        .xname { font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+        .xtags { font-size: 12px; color: var(--secondary-text-color); overflow:hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+        .xcustom { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 10px; border-bottom: 1px solid var(--divider-color); }
+        .xcustom:last-child { border-bottom: 0; }
       </style>
 
       <ha-card>
@@ -643,13 +899,32 @@ class WeeklyTrainingCard extends HTMLElement {
           ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
           ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
 
-          <div class="topbar">
-            <div>
-              <div class="title">${this._escape(String(title || ""))}</div>
-              <div class="sub">${this._escape(weekLabel)}${weekRange ? ` \u2022 ${this._escape(weekRange)}` : ""}${activeName ? ` \u2022 ${this._escape(activeName)}` : ""}</div>
+          <div class="header">
+            <div class="h-title">${this._escape(String(title || ""))}</div>
+            <div class="h-row">
+              <div class="weekctrl" aria-label="Week">
+                <button class="navbtn" title="Previous week (coming soon)" disabled>\u25c0</button>
+                <div class="weekpill">
+                  <div class="wk">${this._escape(weekLabel)}</div>
+                  <div class="range">${this._escape(weekRange || "")}</div>
+                </div>
+                <button class="navbtn" title="Next week (coming soon)" disabled>\u25b6</button>
+              </div>
+              <button class="gearbtn" id="settings" title="Exercise settings" ${saving ? "disabled" : ""}>\u2699</button>
             </div>
-            <div class="top-actions">
-              <button id="people" ${saving ? "disabled" : ""}>People</button>
+            <div class="peoplebar">
+              <div class="peoplelabel">People</div>
+              <div class="peoplechips" aria-label="People list">
+                ${people.map((p) => {
+                  const pid = String(p?.id || "");
+                  const nm = String(p?.name || "");
+                  const initial = (nm || "?").slice(0, 1).toUpperCase();
+                  const active = pid === activeId;
+                  const color = this._colorFor(pid);
+                  return `<button class="pchip ${active ? "active" : ""}" data-person="${this._escape(pid)}" ${saving ? "disabled" : ""}><span class="pcircle" style="background:${this._escape(color)}">${this._escape(initial)}</span><span class="pname">${this._escape(nm || pid)}</span></button>`;
+                }).join("")}
+                <button class="pchip add" id="person-add" title="Add person" ${saving ? "disabled" : ""}>+</button>
+              </div>
             </div>
           </div>
 
@@ -659,7 +934,7 @@ class WeeklyTrainingCard extends HTMLElement {
                 const w = workoutsByDay[idx];
                 const activeCls = idx === selectedDay ? "active" : "";
                 const badge = w ? "Workout" : "Empty";
-                const small = w ? String(w.name || "Session") : "Tap to create";
+                const small = w ? String(w.name || "Session") : "Tap to add";
                 return `
                   <button class="day ${activeCls}" data-day="${idx}" ${saving ? "disabled" : ""}>
                     <div class="meta">
@@ -672,26 +947,25 @@ class WeeklyTrainingCard extends HTMLElement {
               }).join("")}
             </div>
 
-            <div class="main">
+            <div class="main" id="main-panel">
               <h3>${this._escape(daysDa[selectedDay] || "Day")}</h3>
               ${selectedWorkout ? `
-                <div class="sub">${this._escape(String(selectedWorkout.name || "Session"))} \u2022 ${this._escape(String(selectedWorkout.date || ""))}</div>
+                <div class="range">${this._escape(String(selectedWorkout.name || "Session"))} \u2022 ${this._escape(String(selectedWorkout.date || ""))}</div>
                 <div class="items">
                   ${(Array.isArray(selectedWorkout.items) ? selectedWorkout.items : []).map((it) => {
                     if (!it || typeof it !== "object") return "";
                     const ex = String(it.exercise || "");
                     const sr = String(it.sets_reps || "");
                     const load = it.suggested_load != null ? String(it.suggested_load) : "";
-                    return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="sub">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
+                    return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
                   }).join("")}
                 </div>
-                <div class="actions" style="margin-top:12px">
-                  <button class="primary" id="create" ${saving || loading ? "disabled" : ""}>Replace workout</button>
-                </div>
               ` : `
-                <div class="muted">Ingen workout endnu. Tryk for at oprette.</div>
-                <div class="actions" style="margin-top:12px">
-                  <button class="primary" id="create" ${saving || loading ? "disabled" : ""}>Create workout</button>
+                <div class="empty-main" id="open-workout">
+                  <div class="empty-card">
+                    <div class="empty-title">Her kommer dit tr\u00e6ningspas</div>
+                    <div class="empty-sub">Tap to add</div>
+                  </div>
                 </div>
               `}
             </div>
@@ -699,13 +973,20 @@ class WeeklyTrainingCard extends HTMLElement {
 
           ${peopleModal}
           ${workoutModal}
+          ${settingsModal}
         </div>
       </ha-card>
     `;
 
-    // Wire events
-    this.shadowRoot.querySelector("#people")?.addEventListener("click", () => { this._ui.showPeople = true; this._render(); });
-    this.shadowRoot.querySelector("#create")?.addEventListener("click", () => { this._ui.showWorkout = true; this._render(); });
+    // Wire events (header)
+    this.shadowRoot.querySelector("#settings")?.addEventListener("click", () => { this._openSettingsModal(); });
+    this.shadowRoot.querySelector("#person-add")?.addEventListener("click", () => { this._openPersonModal(""); });
+    this.shadowRoot.querySelectorAll("button.pchip[data-person]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const pid = String(e.currentTarget.getAttribute("data-person") || "");
+        if (pid) this._openPersonModal(pid);
+      });
+    });
 
     this.shadowRoot.querySelectorAll("button.day[data-day]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -717,16 +998,12 @@ class WeeklyTrainingCard extends HTMLElement {
       });
     });
 
+    this.shadowRoot.querySelector("#open-workout")?.addEventListener("click", () => { this._ui.showWorkout = true; this._render(); });
+
     // People modal
     this.shadowRoot.querySelector("#people-close")?.addEventListener("click", () => { this._ui.showPeople = false; this._render(); });
     this.shadowRoot.querySelector("#people-backdrop")?.addEventListener("click", (e) => {
       if (e.target && e.target.id === "people-backdrop") { this._ui.showPeople = false; this._render(); }
-    });
-    this.shadowRoot.querySelectorAll("button.chip[data-person]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const pid = String(e.currentTarget.getAttribute("data-person") || "");
-        if (pid) this._setActivePerson(pid);
-      });
     });
     this.shadowRoot.querySelector("#p-name")?.addEventListener("input", (e) => { this._newPerson.name = String(e.target.value || ""); });
     this.shadowRoot.querySelector("#p-gender")?.addEventListener("change", (e) => { this._newPerson.gender = String(e.target.value || "male"); });
@@ -737,8 +1014,9 @@ class WeeklyTrainingCard extends HTMLElement {
     this.shadowRoot.querySelector("#p-sq")?.addEventListener("input", (e) => { this._newPerson.max_squat = Number(e.target.value || 0); });
     this.shadowRoot.querySelector("#p-dl")?.addEventListener("input", (e) => { this._newPerson.max_deadlift = Number(e.target.value || 0); });
     this.shadowRoot.querySelector("#p-bp")?.addEventListener("input", (e) => { this._newPerson.max_bench = Number(e.target.value || 0); });
-    this.shadowRoot.querySelector("#p-add")?.addEventListener("click", () => this._addPerson());
-    this.shadowRoot.querySelector("#p-delete")?.addEventListener("click", () => { if (activeId) this._deletePerson(activeId); });
+    this.shadowRoot.querySelector("#p-save")?.addEventListener("click", () => this._addPerson());
+    this.shadowRoot.querySelector("#p-set-active")?.addEventListener("click", () => { const pid = String(this._ui.editPersonId || ""); if (pid) this._setActivePerson(pid); });
+    this.shadowRoot.querySelector("#p-delete")?.addEventListener("click", () => { const pid = String(this._ui.editPersonId || ""); if (pid) this._deletePerson(pid); });
 
     // Workout modal
     this.shadowRoot.querySelector("#workout-close")?.addEventListener("click", () => { this._ui.showWorkout = false; this._render(); });
@@ -770,6 +1048,52 @@ class WeeklyTrainingCard extends HTMLElement {
       this._generate();
     });
 
+    // Settings modal
+    this.shadowRoot.querySelector("#settings-close")?.addEventListener("click", () => { this._ui.showSettings = false; this._settingsDraft = null; this._render(); });
+    this.shadowRoot.querySelector("#s-cancel")?.addEventListener("click", () => { this._ui.showSettings = false; this._settingsDraft = null; this._render(); });
+    this.shadowRoot.querySelector("#settings-backdrop")?.addEventListener("click", (e) => {
+      if (e.target && e.target.id === "settings-backdrop") { this._ui.showSettings = false; this._settingsDraft = null; this._render(); }
+    });
+    this.shadowRoot.querySelector("#s-save")?.addEventListener("click", () => { this._saveExerciseConfig(); });
+    this.shadowRoot.querySelector("#s-query")?.addEventListener("input", (e) => {
+      if (!this._settingsDraft) return;
+      this._settingsDraft.query = String(e.target.value || "");
+      this._render();
+    });
+    this.shadowRoot.querySelectorAll("input.xcheck[data-ex]").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        if (!this._settingsDraft) return;
+        const name = String(e.target.getAttribute("data-ex") || "");
+        if (!name) return;
+        if (e.target.checked) this._settingsDraft.disabled.delete(name);
+        else this._settingsDraft.disabled.add(name);
+      });
+    });
+    this.shadowRoot.querySelector("#c-name")?.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.name = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#c-tags")?.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.tags = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#c-eq")?.addEventListener("input", (e) => { if (this._settingsDraft) this._settingsDraft.new_custom.equipment = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#c-add")?.addEventListener("click", () => {
+      if (!this._settingsDraft) return;
+      const name = String(this._settingsDraft.new_custom.name || "").trim();
+      if (!name) return;
+      const csv = (s) => String(s || "").split(",").map((p) => p.trim()).filter(Boolean);
+      const tags = csv(this._settingsDraft.new_custom.tags).map((t) => t.toLowerCase());
+      const equipment = csv(this._settingsDraft.new_custom.equipment).map((t) => t.toLowerCase());
+      this._settingsDraft.custom = [...(this._settingsDraft.custom || []), { name, tags, equipment }];
+      this._settingsDraft.new_custom = { name: "", tags: "", equipment: "" };
+      this._render();
+    });
+    this.shadowRoot.querySelectorAll("button[data-custom-del]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        if (!this._settingsDraft) return;
+        const idx = Number(e.currentTarget.getAttribute("data-custom-del"));
+        if (!Number.isFinite(idx)) return;
+        const cur = Array.isArray(this._settingsDraft.custom) ? this._settingsDraft.custom : [];
+        this._settingsDraft.custom = cur.filter((_, i) => i !== idx);
+        this._render();
+      });
+    });
+
     // Restore focus after re-render (only happens on load/save/generate)
     queueMicrotask(() => this._restoreFocus());
   }
@@ -791,6 +1115,15 @@ class WeeklyTrainingCard extends HTMLElement {
     } catch (_) {
       return "";
     }
+  }
+
+  _colorFor(seed) {
+    // Deterministic, muted-but-colorful avatar backgrounds.
+    const s = String(seed || "");
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const hue = h % 360;
+    return `hsl(${hue} 45% 45%)`;
   }
 
   _escape(value) {
