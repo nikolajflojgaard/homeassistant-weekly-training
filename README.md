@@ -35,7 +35,7 @@ Add a Manual card:
 ```yaml
 type: custom:weekly-training-card
 title: Ugeplan
-# Optional: center the card and cap its width on wide dashboards
+# Optional: cap the card's width (it will still fill the column width)
 max_width: 1100px
 ```
 

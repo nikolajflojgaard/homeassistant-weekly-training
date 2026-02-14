@@ -508,7 +508,12 @@ class WeeklyTrainingCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; }
-        ha-card { overflow:hidden; ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)}; margin: 0 auto;` : ""} }
+        /* Always fill the available Lovelace column width. */
+        ha-card {
+          overflow: hidden;
+          width: 100%;
+          ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
+        }
         .wrap { padding: 12px; }
         .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
         .title { font-size: 18px; font-weight: 600; }

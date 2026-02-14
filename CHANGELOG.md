@@ -34,3 +34,7 @@ All notable changes to this project will be documented in this file.
 - More neutral/minimal look:
   - Use HA theme scrim color for modals (no hard-coded overlay color).
   - Screenshots updated to a neutral accent color.
+
+## 0.1.6 - 2026-02-14
+
+- UI fix: the card always fills the available Lovelace column width (no auto-centering).
