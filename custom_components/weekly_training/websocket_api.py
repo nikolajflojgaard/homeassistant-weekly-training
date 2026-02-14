@@ -105,6 +105,7 @@ async def ws_get_state(
         today = today - timedelta(days=1)
     current_week_start = (today - timedelta(days=today.weekday())).isoformat()
     current_week_number = int(today.isocalendar().week)
+
     connection.send_result(
         msg["id"],
         {
@@ -119,6 +120,66 @@ async def ws_get_state(
             ),
         },
     )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/set_workout_completed",
+        vol.Required("entry_id"): str,
+        vol.Required("person_id"): str,
+        vol.Required("week_start"): str,
+        vol.Required("date"): str,
+        vol.Required("completed"): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_set_workout_completed(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    state = await coordinator.store.async_set_workout_completed(
+        person_id=str(msg["person_id"]),
+        week_start=str(msg["week_start"]),
+        date_iso=str(msg["date"]),
+        completed=bool(msg["completed"]),
+    )
+    await coordinator.async_request_refresh()
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/delete_workout",
+        vol.Required("entry_id"): str,
+        vol.Required("person_id"): str,
+        vol.Required("week_start"): str,
+        vol.Required("date"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_delete_workout(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    state = await coordinator.store.async_delete_workout(
+        person_id=str(msg["person_id"]),
+        week_start=str(msg["week_start"]),
+        date_iso=str(msg["date"]),
+    )
+    await coordinator.async_request_refresh()
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
 
 
 @websocket_api.websocket_command(
@@ -294,3 +355,5 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_plan)
     websocket_api.async_register_command(hass, ws_generate_plan)
     websocket_api.async_register_command(hass, ws_get_library)
+    websocket_api.async_register_command(hass, ws_set_workout_completed)
+    websocket_api.async_register_command(hass, ws_delete_workout)

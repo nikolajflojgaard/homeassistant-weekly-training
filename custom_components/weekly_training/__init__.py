@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_track_time_change
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import WeeklyTrainingCoordinator
@@ -15,6 +18,28 @@ from .services import async_register as async_register_services
 from .websocket_api import async_register as async_register_ws
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _schedule_week_cleanup(*, hass: HomeAssistant, entry: ConfigEntry, coordinator: WeeklyTrainingCoordinator) -> None:
+    """Delete previous week's plans automatically on Monday 01:00 (local time)."""
+
+    async def _run(now) -> None:
+        try:
+            local_now = dt_util.as_local(now)
+            if local_now.weekday() != 0:
+                return
+            if local_now.hour < 1:
+                return
+            today = local_now.date()
+            monday = today - timedelta(days=today.weekday())
+            prev_week_start = (monday - timedelta(days=7)).isoformat()
+            await coordinator.store.async_delete_week(week_start=prev_week_start)
+            await coordinator.async_request_refresh()
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Weekly cleanup failed for entry_id=%s", entry.entry_id)
+
+    remove = async_track_time_change(hass, _run, hour=1, minute=0, second=0)
+    entry.async_on_unload(remove)
 
 async def _async_register_domain_resources(hass: HomeAssistant) -> None:
     """Register domain-wide resources once.
@@ -52,6 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
+    _schedule_week_cleanup(hass=hass, entry=entry, coordinator=coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

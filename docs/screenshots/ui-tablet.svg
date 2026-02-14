@@ -28,16 +28,10 @@
     <!-- Header -->
     <text x="18" y="34" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="20" fill="#111827">Ugeplan</text>
 
-    <!-- Week controls -->
-    <rect x="18" y="46" width="38" height="38" rx="12" fill="#ffffff" stroke="#d1d5db" opacity="0.75"/>
-    <text x="32" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">◀</text>
-
-    <rect x="66" y="46" width="170" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="80" y="68" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Week 7</text>
-    <text x="80" y="82" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">09.02 - 15.02</text>
-
-    <rect x="246" y="46" width="38" height="38" rx="12" fill="#ffffff" stroke="#d1d5db" opacity="0.75"/>
-    <text x="260" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">▶</text>
+    <!-- Week header (no arrows) -->
+    <rect x="18" y="46" width="220" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="32" y="68" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Week 7</text>
+    <text x="32" y="82" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">09.02 - 15.02</text>
 
     <rect x="1120" y="46" width="42" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
     <text x="1132" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">⛭</text>
@@ -67,6 +61,8 @@
     <text x="34" y="194" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">10.02 • Full Body A</text>
     <rect x="236" y="166" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
     <text x="246" y="181" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">Workout</text>
+    <rect x="236" y="188" width="64" height="20" rx="999" fill="#ffffff" stroke="#475569"/>
+    <text x="250" y="203" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#475569">Nikolaj</text>
 
     <!-- Selected day highlight -->
     <rect x="18" y="146" width="300" height="64" rx="0" fill="#f1f5f9" opacity="0.75"/>

@@ -30,6 +30,23 @@ from .const import (
 )
 
 _STORAGE_VERSION = 1
+_DEFAULT_COLORS = [
+    "#475569",  # slate
+    "#0f766e",  # teal
+    "#1d4ed8",  # blue
+    "#7c3aed",  # violet
+    "#b45309",  # amber/brown
+    "#be123c",  # rose
+    "#15803d",  # green
+]
+
+
+def _color_for_id(seed: str) -> str:
+    s = str(seed or "")
+    h = 0
+    for ch in s:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return _DEFAULT_COLORS[h % len(_DEFAULT_COLORS)]
 
 
 def _now_iso() -> str:
@@ -52,6 +69,7 @@ def _new_person(
     return {
         "id": person_id,
         "name": str(name).strip() or "Person",
+        "color": _color_for_id(person_id),
         "gender": str(gender).lower(),
         "duration_minutes": int(duration_minutes),
         "preferred_exercises": str(preferred_exercises or "").strip(),
@@ -272,11 +290,19 @@ class WeeklyTrainingStore:
         if not incoming_id:
             person = {**_new_person(name=str(person.get("name") or "Person")), **person}
             incoming_id = str(person.get("id") or "")
+        existing = next((p for p in people if isinstance(p, dict) and str(p.get("id") or "") == incoming_id), None)
 
         now = _now_iso()
         normalized = dict(person)
         normalized["id"] = incoming_id
         normalized["name"] = str(normalized.get("name") or "Person").strip() or "Person"
+        # Color is user-configurable. If missing, keep existing, else choose a deterministic default.
+        color = str(normalized.get("color") or "").strip()
+        if not color and isinstance(existing, dict):
+            color = str(existing.get("color") or "").strip()
+        if not color:
+            color = _color_for_id(incoming_id)
+        normalized["color"] = color
         normalized["gender"] = str(normalized.get("gender") or DEFAULT_GENDER).lower()
         normalized["duration_minutes"] = int(normalized.get("duration_minutes") or DEFAULT_DURATION_MINUTES)
         normalized["preferred_exercises"] = str(normalized.get("preferred_exercises") or "").strip()
@@ -334,6 +360,74 @@ class WeeklyTrainingStore:
         plans[str(person_id)] = person_plans
         state["plans"] = plans
         return await self.async_save(state)
+
+    async def async_delete_week(self, *, week_start: str) -> dict[str, Any]:
+        """Delete a week plan for all people (blank canvas on new week)."""
+        state = await self.async_load()
+        plans = state.get("plans")
+        if not isinstance(plans, dict):
+            return state
+        changed = False
+        for pid, person_plans in list(plans.items()):
+            if not isinstance(person_plans, dict):
+                continue
+            if str(week_start) in person_plans:
+                person_plans.pop(str(week_start), None)
+                plans[str(pid)] = person_plans
+                changed = True
+        if changed:
+            state["plans"] = plans
+            return await self.async_save(state)
+        return state
+
+    async def async_set_workout_completed(
+        self, *, person_id: str, week_start: str, date_iso: str, completed: bool
+    ) -> dict[str, Any]:
+        """Toggle completed flag on a workout by date."""
+        state = await self.async_load()
+        plan = self.get_plan(state, person_id=str(person_id), week_start=str(week_start))
+        if not isinstance(plan, dict):
+            return state
+        workouts = plan.get("workouts")
+        if not isinstance(workouts, list):
+            return state
+        target = str(date_iso or "").strip()
+        if not target:
+            return state
+        changed = False
+        for w in workouts:
+            if not isinstance(w, dict):
+                continue
+            if str(w.get("date") or "") != target:
+                continue
+            w["completed"] = bool(completed)
+            w["completed_at"] = _now_iso() if completed else None
+            changed = True
+            break
+        if not changed:
+            return state
+        plan["workouts"] = workouts
+        return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
+
+    async def async_delete_workout(
+        self, *, person_id: str, week_start: str, date_iso: str
+    ) -> dict[str, Any]:
+        """Delete a workout by date."""
+        state = await self.async_load()
+        plan = self.get_plan(state, person_id=str(person_id), week_start=str(week_start))
+        if not isinstance(plan, dict):
+            return state
+        workouts = plan.get("workouts")
+        if not isinstance(workouts, list):
+            return state
+        target = str(date_iso or "").strip()
+        if not target:
+            return state
+        next_workouts = [w for w in workouts if not (isinstance(w, dict) and str(w.get("date") or "") == target)]
+        if len(next_workouts) == len(workouts):
+            return state
+        plan["workouts"] = next_workouts
+        return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
 
     def get_plan(self, state: dict[str, Any], *, person_id: str, week_start: str) -> dict[str, Any] | None:
         plans = state.get("plans") if isinstance(state, dict) else None

@@ -6,10 +6,14 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
 
 ## Features
 
-- People profiles (male/female), per-person defaults and 1RM maxes (edit from the header avatars):
+- People profiles (male/female), per-person defaults and 1RM maxes:
   - Squat (SQ), Deadlift (DL), Bench Press (BP)
+- Person UX (tablet-friendly):
+  - Tap avatar: set active person (UI accent follows)
+  - Long-press avatar: edit person
+  - Editable person color
 - Weekly canvas:
-  - `Week X` is shown at the top (week switching comes later)
+  - `Week X` is shown at the top
   - Pick a day from the left list and generate that day's session in a popup
   - New week starts blank (generate again)
   - Week rollover happens at **Monday 01:00** (local time)
@@ -23,6 +27,10 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
   - If you pick Squat, the generator will not suggest Deadlift (and vice versa)
   - Bench can be paired with either
 - Uses only basic exercises (no machines) with barbell/dumbbell/band/bodyweight
+- Workout actions:
+  - Swipe right: mark Completed
+  - Swipe left: delete workout
+  - Bottom bar shows completed workouts for the current week across all people
 
 ## Install (HACS)
 

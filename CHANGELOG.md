@@ -59,3 +59,22 @@ All notable changes to this project will be documented in this file.
   - New week starts at **Monday 01:00** (local time), not at midnight
 - Compatibility:
   - Remove optional chaining/nullish coalescing from the card JS (avoids parse errors on older WebViews)
+
+## 0.1.9 - 2026-02-14
+
+- People:
+  - Click avatar chip: set active person (UI accent follows)
+  - Long-press avatar chip: edit person
+  - Person color is editable and persisted (used across UI)
+- Week header:
+  - Clean header: week number + date range (no arrows)
+- Day list:
+  - Dates always shown (person-independent)
+  - TODAY is strongly highlighted
+  - Shows multiple per-person workout badges per day (Workout/Done)
+- Workouts:
+  - Swipe right on a generated workout: toggle Completed
+  - Swipe left: Delete workout
+  - Completed bar at the bottom shows all completed workouts for the current week across all people
+- Automation:
+  - Previous week is cleared automatically at **Monday 01:00** (local time)
