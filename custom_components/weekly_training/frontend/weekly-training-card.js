@@ -64,6 +64,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._focusKey = "";
     this._focusSelStart = null;
     this._focusSelEnd = null;
+    this._focusWasInside = false;
 
     // UI state (purely client-side).
 	    this._ui = {
@@ -162,6 +163,7 @@ class WeeklyTrainingCard extends HTMLElement {
     const key = (typeof el.getAttribute === "function" && el.getAttribute("data-focus-key")) || "";
     if (!key) return;
     this._focusKey = key;
+    this._focusWasInside = true;
     try {
       this._focusSelStart = typeof el.selectionStart === "number" ? el.selectionStart : null;
       this._focusSelEnd = typeof el.selectionEnd === "number" ? el.selectionEnd : null;
@@ -172,13 +174,21 @@ class WeeklyTrainingCard extends HTMLElement {
   }
 
   _restoreFocus() {
-    if (!this._focusKey) return;
+    if (!this._focusKey || !this._focusWasInside) return;
     const el = this.shadowRoot ? this.shadowRoot.querySelector(`[data-focus-key="${this._focusKey}"]`) : null;
     if (!el) return;
-    // Don't steal focus if user clicked elsewhere outside the card.
-    const rn = this.getRootNode ? this.getRootNode() : null;
-    const active = rn && rn.activeElement ? rn.activeElement : null;
-    if (active && active !== this && active !== document.body && active !== document.documentElement) return;
+    // Don't steal focus if the user moved focus outside the card.
+    const active = document.activeElement;
+    if (
+      active &&
+      active !== document.body &&
+      active !== document.documentElement &&
+      active !== this &&
+      !this.contains(active) &&
+      !(this.shadowRoot && this.shadowRoot.contains(active))
+    ) {
+      return;
+    }
     try {
       el.focus();
       if (this._focusSelStart != null && this._focusSelEnd != null && typeof el.setSelectionRange === "function") {
@@ -275,7 +285,8 @@ class WeeklyTrainingCard extends HTMLElement {
     this._draft.duration_minutes = Number(overrides.duration_minutes != null ? overrides.duration_minutes : 45);
     this._draft.preferred_exercises = String(overrides.preferred_exercises || "");
     this._draft.progression = (overrides.progression && typeof overrides.progression === "object") ? { ...overrides.progression } : { enabled: true, step_pct: 2.5 };
-    this._draft.cycle = (overrides.cycle && typeof overrides.cycle === "object") ? { ...overrides.cycle } : { enabled: false, preset: "strength", start_week_start: "", training_weekdays: [0, 2, 4], weeks: 4, step_pct: 2.5, deload_pct: 10, deload_volume: 0.65 };
+    // Cycle is per-person now. Keep a harmless default here for backwards compatibility only.
+    this._draft.cycle = { enabled: false, preset: "strength", start_week_start: "", training_weekdays: [0, 2, 4], weeks: 4, step_pct: 2.5, deload_pct: 10, deload_volume: 0.65 };
     this._draft.session_overrides = { ...this._draft.session_overrides, ...(overrides.session_overrides || {}) };
 
     const people = Array.isArray(st.people) ? st.people : [];
@@ -313,7 +324,7 @@ class WeeklyTrainingCard extends HTMLElement {
   _clampWeekOffset(value) {
     const v = Number(value);
     if (!Number.isFinite(v)) return 0;
-    return Math.max(-3, Math.min(3, Math.trunc(v)));
+    return Math.max(-1, Math.min(3, Math.trunc(v)));
   }
 
   _selectedWeekStartIso(runtime) {
@@ -495,16 +506,18 @@ class WeeklyTrainingCard extends HTMLElement {
     const pid = String(this._activePersonId() || this._defaultPersonId() || "");
     const rt = (this._state && this._state.runtime) || {};
     const startWeek = this._selectedWeekStartIso(rt);
-    const cur = (this._draft && this._draft.cycle && typeof this._draft.cycle === "object") ? this._draft.cycle : {};
+    const person = this._personById(pid);
+    const cur = (person && person.cycle && typeof person.cycle === "object") ? person.cycle : {};
     const preset = String(cur.preset || "strength");
     const tdays = Array.isArray(cur.training_weekdays) ? cur.training_weekdays.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [0, 2, 4];
     const stepPct = cur.step_pct != null ? Number(cur.step_pct) : 3.0;
     const deloadPct = cur.deload_pct != null ? Number(cur.deload_pct) : 10.0;
     const deloadVol = cur.deload_volume != null ? Number(cur.deload_volume) : 0.65;
+    const weeks = cur.weeks != null ? Number(cur.weeks) : 4;
     this._ui.cycleDraft = {
       person_id: pid || (people[0] && people[0].id ? String(people[0].id) : ""),
       start_week_start: String(startWeek || ""),
-      weeks: 4,
+      weeks: Number.isFinite(weeks) ? weeks : 4,
       preset,
       training_weekdays: Array.from(new Set(tdays)).sort((a, b) => a - b),
       step_pct: stepPct,
@@ -528,7 +541,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._error = "";
     this._render();
     try {
-      // Persist cycle config (calendar-driven) so planned highlights stay stable.
+      // Persist per-person cycle config so planned highlights stay stable.
       const cycle = {
         enabled: true,
         preset: String(d.preset || "strength"),
@@ -539,11 +552,7 @@ class WeeklyTrainingCard extends HTMLElement {
         deload_pct: Number(d.deload_pct || 0),
         deload_volume: Number(d.deload_volume || 0.65),
       };
-      await this._callWS({
-        type: "weekly_training/set_overrides",
-        entry_id: this._entryId,
-        overrides: { cycle },
-      });
+      await this._callWS({ type: "weekly_training/set_person_cycle", entry_id: this._entryId, person_id: personId, cycle });
 
       const res = await this._callWS({
         type: "weekly_training/generate_cycle",
@@ -570,21 +579,13 @@ class WeeklyTrainingCard extends HTMLElement {
     this._error = "";
     this._render();
     try {
-      const cycle = { enabled: false, training_weekdays: [], start_week_start: "" };
-      const res = await this._callWS({
-        type: "weekly_training/set_overrides",
-        entry_id: this._entryId,
-        overrides: { cycle },
-      });
+      const pid = this._ui && this._ui.cycleDraft ? String(this._ui.cycleDraft.person_id || "") : "";
+      if (!pid) throw new Error("No person selected");
+      const res = await this._callWS({ type: "weekly_training/set_person_cycle", entry_id: this._entryId, person_id: pid, cycle: { enabled: false } });
       this._applyState((res && res.state) || this._state);
       // Keep the planner open but reflect the cleared state.
       if (this._ui.cycleDraft) {
         this._ui.cycleDraft.training_weekdays = [];
-      }
-      if (this._draft && this._draft.cycle) {
-        this._draft.cycle.enabled = false;
-        this._draft.cycle.training_weekdays = [];
-        this._draft.cycle.start_week_start = "";
       }
       this._showToast("Planned markers cleared", "", null);
     } catch (e) {
@@ -670,8 +671,9 @@ class WeeklyTrainingCard extends HTMLElement {
           return d0.toISOString().slice(0, 10);
         } catch (_) {}
       }
-      // Fall back to current cycle config if available.
-      const cur = this._draft && this._draft.cycle && typeof this._draft.cycle === "object" ? this._draft.cycle : null;
+      // Fall back to per-person cycle config if available.
+      const person = this._personById(pid);
+      const cur = person && person.cycle && typeof person.cycle === "object" ? person.cycle : null;
       const s = cur ? String(cur.start_week_start || "") : "";
       return s ? s.slice(0, 10) : wk;
     })();
@@ -1066,9 +1068,9 @@ class WeeklyTrainingCard extends HTMLElement {
 
     const activeName = viewPerson ? String(viewPerson.name || "") : "";
 
-    const cycle = this._draft && this._draft.cycle && typeof this._draft.cycle === "object" ? this._draft.cycle : { enabled: false };
-    const cycleInfo = this._cycleIndexForWeekStart(cycle, weekStartIso);
-    const trainingDays = Array.isArray(cycle.training_weekdays) ? cycle.training_weekdays.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [];
+    const personCycle = viewPerson && viewPerson.cycle && typeof viewPerson.cycle === "object" ? viewPerson.cycle : { enabled: false };
+    const cycleInfo = this._cycleIndexForWeekStart(personCycle, weekStartIso);
+    const trainingDays = Array.isArray(personCycle.training_weekdays) ? personCycle.training_weekdays.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [];
 
 	    const workouts = plan && Array.isArray(plan.workouts) ? plan.workouts : [];
 	    const workoutsByDay = {};
@@ -1249,12 +1251,12 @@ class WeeklyTrainingCard extends HTMLElement {
 	          </div>
 	          <div class="modal-b">
             <div class="hint">V\u00e6lg detaljer og gener\u00e9r dagens tr\u00e6ningspas. Hvis der allerede findes et pas p\u00e5 dagen, bliver det erstattet.</div>
-            ${cycleInfo.enabled ? `
+            ${(personCycle && personCycle.enabled && cycleInfo.in_window) ? `
               <div class="hint" style="margin-top:8px">
-                Cycle: <b>${this._escape(this._cycleDisplayName(cycle.preset))}</b> \u2022 Week ${this._escape(String((cycleInfo.index || 0) + 1))}/4${cycleInfo.is_deload ? " \u2022 Deload" : ""}
+                Cycle: <b>${this._escape(this._cycleDisplayName(personCycle.preset))}</b> \u2022 Week ${this._escape(String((cycleInfo.index || 0) + 1))}/4${cycleInfo.is_deload ? " \u2022 Deload" : ""}
               </div>
             ` : ``}
-            ${cycleInfo.enabled && !trainingDays.includes(selectedDay) ? `
+            ${(personCycle && personCycle.enabled && cycleInfo.in_window) && !trainingDays.includes(selectedDay) ? `
               <div class="hint" style="margin-top:8px; color: var(--warning-color, var(--error-color)); font-weight:700">
                 This is not a planned training day.
               </div>
@@ -2366,7 +2368,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		            ${onboarding}
 		            <div class="topbar" aria-label="Header">
 		              <div class="weekpill" aria-label="Week">
-		                <button class="wkbtn" id="wk-prev" title="Previous week" ${saving || loading || weekOffset <= -3 ? "disabled" : ""}>
+		                <button class="wkbtn" id="wk-prev" title="Previous week" ${saving || loading || weekOffset <= -1 ? "disabled" : ""}>
 		                  <ha-icon icon="mdi:chevron-left"></ha-icon>
 		                </button>
 		                <button class="wkcenter" id="wk-reset" title="${weekOffset === 0 ? "Current week" : "Back to current week"}" ${saving || loading ? "disabled" : ""}>

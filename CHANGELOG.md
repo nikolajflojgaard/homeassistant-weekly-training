@@ -210,3 +210,10 @@ All notable changes to this project will be documented in this file.
 
 - Fix: cycle planning now works again (WS `generate_cycle` accepts `expected_rev`).
 - Fix: **Planned** markers only show from the cycle start week and forward (not backwards), limited to the configured cycle window.
+
+## 0.3.6 - 2026-02-14
+
+- Cycles: 4-week cycle config is now **per person** (only one active cycle per person).
+- Cycles: automatically clears an expired cycle (after its configured window).
+- Week navigation: clamp browsing to **-1 week back** and **+3 weeks forward**.
+- Focus hardening: re-renders while typing no longer drop focus/cursor in inputs (tablet UX).

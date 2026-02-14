@@ -129,11 +129,19 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if overrides.get("preferred_exercises") is not None:
             effective_profile["preferred_exercises"] = str(overrides.get("preferred_exercises") or "")
 
+        # Per-person cycle config (one active cycle per person).
+        overrides_for_gen = dict(overrides)
+        person_cycle = person.get("cycle")
+        if isinstance(person_cycle, dict):
+            overrides_for_gen["cycle"] = person_cycle
+        else:
+            overrides_for_gen.pop("cycle", None)
+
         existing_plan = self.store.get_plan(state, person_id=active_id, week_start=week_start_day.isoformat())
         plan = generate_session(
             profile=effective_profile,
             library=library,
-            overrides=overrides,
+            overrides=overrides_for_gen,
             week_start_day=week_start_day,
             weekday=weekday,
             existing_plan=existing_plan,

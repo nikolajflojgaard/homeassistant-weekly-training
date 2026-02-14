@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DEFAULT_DURATION_MINUTES,
@@ -58,6 +59,19 @@ def _color_for_id(seed: str) -> str:
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _effective_today_local() -> date:
+    """Match UI rollover: new week starts Monday 01:00 (local time)."""
+    now = dt_util.as_local(dt_util.utcnow())
+    today = now.date()
+    if now.weekday() == 0 and now.hour < 1:
+        today = today - timedelta(days=1)
+    return today
+
+
+def _week_start(day_value: date) -> date:
+    return day_value - timedelta(days=day_value.weekday())
 
 
 class ConflictError(RuntimeError):
@@ -155,6 +169,8 @@ def _new_person(
             "deadlift": int(max_deadlift),
             "bench": int(max_bench),
         },
+        # Optional per-person 4-week cycle configuration.
+        "cycle": None,
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     }
@@ -173,7 +189,7 @@ class WeeklyTrainingStore:
             v = int(value)
         except Exception:  # noqa: BLE001
             return 0
-        return max(-3, min(3, v))
+        return max(-1, min(3, v))
 
     async def async_load(self) -> dict[str, Any]:
         if self._data is None:
@@ -267,6 +283,53 @@ class WeeklyTrainingStore:
             ids = {str(p.get("id") or "") for p in (self._data.get("people") or []) if isinstance(p, dict)}
             if self._data.get("active_person_id") not in ids:
                 self._data["active_person_id"] = next(iter(ids), "")
+
+            # Migrate legacy entry-level cycle config (overrides.cycle) to the active person.
+            overrides = self._data.get("overrides")
+            if isinstance(overrides, dict) and isinstance(overrides.get("cycle"), dict):
+                legacy = overrides.get("cycle") or {}
+                if bool(legacy.get("enabled")):
+                    pid = str(self._data.get("active_person_id") or "")
+                    if pid and isinstance(self._data.get("people"), list):
+                        for p in self._data["people"]:
+                            if not isinstance(p, dict):
+                                continue
+                            if str(p.get("id") or "") != pid:
+                                continue
+                            p["cycle"] = dict(legacy)
+                            break
+                    # Clear legacy to avoid cross-person bleed.
+                    overrides["cycle"] = {"enabled": False, "preset": DEFAULT_CYCLE_PRESET, "start_week_start": "", "training_weekdays": [0, 2, 4], "weeks": 4, "step_pct": DEFAULT_CYCLE_STEP_PCT, "deload_pct": DEFAULT_CYCLE_DELOAD_PCT, "deload_volume": DEFAULT_CYCLE_DELOAD_VOL}
+                    self._data["overrides"] = overrides
+
+            # Prune expired per-person cycles (only keep one active cycle per person).
+            try:
+                cur_monday = _week_start(_effective_today_local())
+                if isinstance(self._data.get("people"), list):
+                    changed = False
+                    for p in self._data["people"]:
+                        if not isinstance(p, dict):
+                            continue
+                        cy = p.get("cycle")
+                        if not isinstance(cy, dict) or not bool(cy.get("enabled")):
+                            continue
+                        start = str(cy.get("start_week_start") or "").strip()[:10]
+                        if not start:
+                            continue
+                        try:
+                            start_ws = date.fromisoformat(start)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        weeks = int(cy.get("weeks") or 4)
+                        weeks = max(1, min(12, weeks))
+                        delta_weeks = int(round((cur_monday - start_ws).days / 7))
+                        if delta_weeks >= weeks:
+                            p["cycle"] = None
+                            changed = True
+                    if changed:
+                        await self._store.async_save(self._data)
+            except Exception:  # noqa: BLE001
+                pass
 
         return dict(self._data)
 
@@ -553,6 +616,11 @@ class WeeklyTrainingStore:
         normalized["preferred_exercises"] = str(normalized.get("preferred_exercises") or "").strip()
         normalized["equipment"] = str(normalized.get("equipment") or DEFAULT_EQUIPMENT).strip()
         normalized["units"] = str(normalized.get("units") or DEFAULT_UNITS).lower()
+        # Preserve existing per-person cycle unless explicitly updated.
+        if "cycle" not in normalized and isinstance(existing, dict) and "cycle" in existing:
+            normalized["cycle"] = existing.get("cycle")
+        if normalized.get("cycle") is not None and not isinstance(normalized.get("cycle"), dict):
+            normalized["cycle"] = None
         maxes = normalized.get("maxes")
         if not isinstance(maxes, dict):
             maxes = {}
@@ -592,6 +660,108 @@ class WeeklyTrainingStore:
             state["plans"] = plans
         if state.get("active_person_id") == person_id:
             state["active_person_id"] = str(people[0].get("id")) if people else ""
+        return await self.async_save(state)
+
+    async def async_set_person_cycle(
+        self,
+        *,
+        person_id: str,
+        cycle: dict[str, Any] | None,
+        expected_rev: int | None = None,
+    ) -> dict[str, Any]:
+        """Set or clear the per-person 4-week cycle config."""
+        state = await self.async_load()
+        self._assert_rev(state, expected_rev)
+        people = state.get("people")
+        if not isinstance(people, list):
+            return state
+        pid = str(person_id or "").strip()
+        if not pid:
+            return state
+
+        # Normalize incoming cycle (or clear).
+        next_cycle: dict[str, Any] | None = None
+        if isinstance(cycle, dict):
+            cur: dict[str, Any] = {}
+            if isinstance(cycle.get("enabled"), bool):
+                cur["enabled"] = bool(cycle.get("enabled"))
+            preset = str(cycle.get("preset") or "").strip().lower()
+            if preset in {"strength", "hypertrophy", "minimalist"}:
+                cur["preset"] = preset
+            if cycle.get("start_week_start") is not None:
+                cur["start_week_start"] = str(cycle.get("start_week_start") or "").strip()
+            tw = cycle.get("training_weekdays")
+            if isinstance(tw, list):
+                cleaned: list[int] = []
+                for x in tw:
+                    try:
+                        xi = int(x)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if 0 <= xi <= 6 and xi not in cleaned:
+                        cleaned.append(xi)
+                cleaned.sort()
+                cur["training_weekdays"] = cleaned
+            if cycle.get("weeks") is not None:
+                try:
+                    cur["weeks"] = int(cycle.get("weeks"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if cycle.get("step_pct") is not None:
+                try:
+                    cur["step_pct"] = float(cycle.get("step_pct"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if cycle.get("deload_pct") is not None:
+                try:
+                    cur["deload_pct"] = float(cycle.get("deload_pct"))
+                except Exception:  # noqa: BLE001
+                    pass
+            if cycle.get("deload_volume") is not None:
+                try:
+                    cur["deload_volume"] = float(cycle.get("deload_volume"))
+                except Exception:  # noqa: BLE001
+                    pass
+
+            if "enabled" not in cur:
+                cur["enabled"] = False
+            if "preset" not in cur:
+                cur["preset"] = DEFAULT_CYCLE_PRESET
+            if "start_week_start" not in cur:
+                cur["start_week_start"] = ""
+            if "training_weekdays" not in cur or not isinstance(cur.get("training_weekdays"), list):
+                cur["training_weekdays"] = [0, 2, 4]
+            if "weeks" not in cur:
+                cur["weeks"] = 4
+            try:
+                cur["weeks"] = max(1, min(12, int(cur.get("weeks") or 4)))
+            except Exception:  # noqa: BLE001
+                cur["weeks"] = 4
+            if "step_pct" not in cur:
+                cur["step_pct"] = DEFAULT_CYCLE_STEP_PCT
+            if "deload_pct" not in cur:
+                cur["deload_pct"] = DEFAULT_CYCLE_DELOAD_PCT
+            if "deload_volume" not in cur:
+                cur["deload_volume"] = DEFAULT_CYCLE_DELOAD_VOL
+            next_cycle = cur if bool(cur.get("enabled")) else None
+
+        changed = False
+        for p in people:
+            if not isinstance(p, dict):
+                continue
+            if str(p.get("id") or "") != pid:
+                continue
+            if next_cycle is None:
+                if p.get("cycle") is not None:
+                    p["cycle"] = None
+                    changed = True
+            else:
+                p["cycle"] = next_cycle
+                changed = True
+            break
+        if not changed:
+            return state
+        state["people"] = people
         return await self.async_save(state)
 
     async def async_save_plan(
