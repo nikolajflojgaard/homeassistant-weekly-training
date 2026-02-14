@@ -217,3 +217,7 @@ All notable changes to this project will be documented in this file.
 - Cycles: automatically clears an expired cycle (after its configured window).
 - Week navigation: clamp browsing to **-1 week back** and **+3 weeks forward**.
 - Focus hardening: re-renders while typing no longer drop focus/cursor in inputs (tablet UX).
+
+## 0.3.7 - 2026-02-14
+
+- Fix: cycle planning no longer fails with `start_week_start must be an ISO date` (planner always uses the currently selected week).

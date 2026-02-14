@@ -532,10 +532,18 @@ class WeeklyTrainingCard extends HTMLElement {
     const d = this._ui && this._ui.cycleDraft ? this._ui.cycleDraft : null;
     if (!d) return;
     const personId = String(d.person_id || "");
-    const startWeekStart = String(d.start_week_start || "").slice(0, 10);
+    // Always plan from the currently selected week (calendar-driven, not person-driven).
+    // Some older UI states can have an empty draft start_week_start even though the header shows a valid week.
+    const rt = (this._state && this._state.runtime) || {};
+    const startWeekStart = String(this._selectedWeekStartIso(rt) || d.start_week_start || "").slice(0, 10);
     const weeks = Number(d.weeks || 4);
     const weekdays = Array.isArray(d.training_weekdays) ? d.training_weekdays : [];
     if (!personId || !startWeekStart || !weekdays.length) return;
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(startWeekStart)) {
+      this._error = "start_week_start must be an ISO date (YYYY-MM-DD)";
+      this._render();
+      return;
+    }
 
     this._saving = true;
     this._error = "";
