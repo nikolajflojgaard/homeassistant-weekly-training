@@ -10,3 +10,7 @@ All notable changes to this project will be documented in this file.
 
 - Weekly canvas UI (Week + weekday selection) and improved people management in the card.
 - Updated README + tablet/mobile screenshots to match the new UI.
+
+## 0.1.2 - 2026-02-14
+
+- Fix: register frontend card + websocket/services from `async_setup_entry` as well (more reliable in config-entry-only setups).
