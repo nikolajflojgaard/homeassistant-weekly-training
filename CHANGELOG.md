@@ -200,3 +200,8 @@ All notable changes to this project will be documented in this file.
 
 - Cycle delete:
   - Swipe-left delete on a cycle workout now prompts: **Delete workout** or **Delete series** (4 weeks).
+
+## 0.3.4 - 2026-02-14
+
+- Cycle planner:
+  - Add **Clear planned** (removes planned markers only, does not delete workouts).

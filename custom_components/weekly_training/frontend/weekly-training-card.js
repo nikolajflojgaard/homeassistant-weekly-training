@@ -558,6 +558,36 @@ class WeeklyTrainingCard extends HTMLElement {
     }
   }
 
+  async _clearPlannedMarkers() {
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      const cycle = { enabled: false, training_weekdays: [], start_week_start: "" };
+      const res = await this._callWS({
+        type: "weekly_training/set_overrides",
+        entry_id: this._entryId,
+        overrides: { cycle },
+      });
+      this._applyState((res && res.state) || this._state);
+      // Keep the planner open but reflect the cleared state.
+      if (this._ui.cycleDraft) {
+        this._ui.cycleDraft.training_weekdays = [];
+      }
+      if (this._draft && this._draft.cycle) {
+        this._draft.cycle.enabled = false;
+        this._draft.cycle.training_weekdays = [];
+        this._draft.cycle.start_week_start = "";
+      }
+      this._showToast("Planned markers cleared", "", null);
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
   _openEditWorkoutModal(personId, weekStartIso, workout) {
     const pid = String(personId || "");
     const wk = String(weekStartIso || "").slice(0, 10);
@@ -1364,13 +1394,14 @@ class WeeklyTrainingCard extends HTMLElement {
 	                  <input data-focus-key="cy_vol2" id="cy-vol2" type="number" min="0.3" max="1" step="0.05" value="${this._escape(String(cycleDraft.deload_volume != null ? cycleDraft.deload_volume : 0.65))}" ${saving ? "disabled" : ""}/>
 	                </div>
 	              </div>
-	            </div>
-	            <div class="modal-f">
-	              <button id="cycle-cancel" ${saving ? "disabled" : ""}>Cancel</button>
-	              <button class="primary" id="cycle-plan" ${saving ? "disabled" : ""}>Plan</button>
-	            </div>
-	          </div>
-	        </div>
+		            </div>
+		            <div class="modal-f">
+		              <button class="danger" id="cycle-clear" ${saving ? "disabled" : ""}>Clear planned</button>
+		              <button id="cycle-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+		              <button class="primary" id="cycle-plan" ${saving ? "disabled" : ""}>Plan</button>
+		            </div>
+		          </div>
+		        </div>
 	      `;
 	    })() : "";
 
@@ -2666,6 +2697,8 @@ class WeeklyTrainingCard extends HTMLElement {
 	    if (qCycleClose) qCycleClose.addEventListener("click", () => { this._ui.showCyclePlanner = false; this._ui.cycleDraft = null; this._render(); });
 	    const qCycleCancel = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-cancel") : null;
 	    if (qCycleCancel) qCycleCancel.addEventListener("click", () => { this._ui.showCyclePlanner = false; this._ui.cycleDraft = null; this._render(); });
+	    const qCycleClear = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-clear") : null;
+	    if (qCycleClear) qCycleClear.addEventListener("click", async () => { await this._clearPlannedMarkers(); });
 	    const qCycleBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-backdrop") : null;
 	    if (qCycleBackdrop) qCycleBackdrop.addEventListener("click", (e) => {
 	      if (e.target && e.target.id === "cycle-backdrop") { this._ui.showCyclePlanner = false; this._ui.cycleDraft = null; this._render(); }
