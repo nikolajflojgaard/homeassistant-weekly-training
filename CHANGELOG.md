@@ -88,3 +88,7 @@ All notable changes to this project will be documented in this file.
 
 - UI fix: active person color now accents only the workout detail panel (right side), not the entire card.
 - TODAY highlight uses theme primary color (calendar-driven), not active person color.
+
+## 0.1.12 - 2026-02-14
+
+- UX: when a workout is swiped to Completed, the right detail panel becomes blank (completed workouts live in the bottom Completed bar).

@@ -614,7 +614,10 @@ class WeeklyTrainingCard extends HTMLElement {
       const diffDays = Math.round((d.getTime() - ws.getTime()) / (24 * 3600 * 1000));
       if (diffDays >= 0 && diffDays <= 6) workoutsByDay[diffDays] = w;
 	    }
-	    const selectedWorkout = workoutsByDay[selectedDay] || null;
+	    const selectedWorkoutRaw = workoutsByDay[selectedDay] || null;
+	    // UX rule: completed workouts should not remain in the big detail panel.
+	    // They still exist in storage and appear in the bottom "Completed" bar.
+	    const selectedWorkout = selectedWorkoutRaw && selectedWorkoutRaw.completed ? null : selectedWorkoutRaw;
 
 	    // Build a per-day list of workouts across all people (for the day list UI).
 	    const allByDay = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
@@ -1248,7 +1251,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	                const activeCls = idx === selectedDay ? "active" : "";
 	                const isToday = idx === todayWeekday;
 	                const dateShort = dayDates[idx] ? String(dayDates[idx]) : "";
-	                const small = w ? String(w.name || "Session") : "Tap to add";
+	                const small = w ? (w.completed ? "Completed" : String(w.name || "Session")) : "Tap to add";
 	                const done = w && w.completed ? true : false;
 	                return `
 	                  <button class="day ${activeCls} ${isToday ? "today" : ""}" data-day="${idx}" ${saving ? "disabled" : ""}>
