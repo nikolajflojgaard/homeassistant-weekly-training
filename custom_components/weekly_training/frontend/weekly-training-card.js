@@ -82,7 +82,6 @@ class WeeklyTrainingCard extends HTMLElement {
 	      showHistory: false,
 	      history: null,
 	      historyWeek: "",
-	      conflict: "",
 	    };
 
     // Cached exercise library payload (from backend).
@@ -117,27 +116,31 @@ class WeeklyTrainingCard extends HTMLElement {
     return 8;
   }
 
-  async _callWS(payload) {
-    if (!this._hass) throw new Error("No hass");
-    const p = { ...(payload || {}) };
-    const t = String(p.type || "");
-    const mutating = t && t !== "weekly_training/get_state" && t !== "weekly_training/get_plan" && t !== "weekly_training/list_entries" && t !== "weekly_training/get_library" && t !== "weekly_training/get_history";
-    if (mutating && this._state && this._state.rev != null && p.expected_rev == null) {
-      p.expected_rev = Number(this._state.rev || 1);
-    }
-    try {
-      return await this._hass.callWS(p);
-    } catch (e) {
-      const code = String((e && e.code) || "");
-      const msg = String((e && e.message) || e);
-      if (code === "conflict" || msg.toLowerCase().includes("expected rev")) {
-        this._ui.conflict = "This view is out of date (changed on another device). Tap Reload.";
-        this._ui.toast = { message: "Out of date", action: "Reload", undo: { kind: "reload" } };
-        this._render();
-      }
-      throw e;
-    }
-  }
+	  async _callWS(payload, _retried) {
+	    if (!this._hass) throw new Error("No hass");
+	    const p = { ...(payload || {}) };
+	    const t = String(p.type || "");
+	    const mutating = t && t !== "weekly_training/get_state" && t !== "weekly_training/get_plan" && t !== "weekly_training/list_entries" && t !== "weekly_training/get_library" && t !== "weekly_training/get_history";
+	    if (mutating && this._state && this._state.rev != null && p.expected_rev == null) {
+	      p.expected_rev = Number(this._state.rev || 1);
+	    }
+	    try {
+	      return await this._hass.callWS(p);
+	    } catch (e) {
+	      const code = String((e && e.code) || "");
+	      const msg = String((e && e.message) || e);
+	      if ((code === "conflict" || msg.toLowerCase().includes("expected rev")) && !_retried) {
+	        // Auto-heal: reload state and retry once. Avoids noisy "reload" prompts in the UI.
+	        try {
+	          await this._reloadState();
+	          return await this._callWS(payload, true);
+	        } catch (_) {
+	          // Fall through to throw the original error.
+	        }
+	      }
+	      throw e;
+	    }
+	  }
 
   _applyState(nextState) {
     if (!nextState || typeof nextState !== "object") return;
@@ -215,18 +218,17 @@ class WeeklyTrainingCard extends HTMLElement {
     } catch (_) {}
   }
 
-  async _reloadState() {
-    if (!this._entryId) return;
-    try {
-      const res = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId });
-      this._applyState((res && res.state) || {});
-      this._ui.conflict = "";
-    } catch (e) {
-      this._error = String((e && e.message) || e);
-    } finally {
-      this._render();
-    }
-  }
+	  async _reloadState() {
+	    if (!this._entryId) return;
+	    try {
+	      const res = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId }, true);
+	      this._applyState((res && res.state) || {});
+	    } catch (e) {
+	      this._error = String((e && e.message) || e);
+	    } finally {
+	      this._render();
+	    }
+	  }
 
   async _openHistoryModal() {
     if (!this._entryId) return;
@@ -1538,7 +1540,6 @@ class WeeklyTrainingCard extends HTMLElement {
 	        }
 	        .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 8px; }
 	        .error { color: var(--error-color); font-size: 13px; margin-top: 8px; }
-	        .conflict { color: var(--warning-color, #b45309); font-size: 13px; margin-top: 8px; }
 	        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
         .row > * { min-width: 180px; flex: 1 1 180px; }
         .row.compact > * { min-width: 140px; }
@@ -1684,8 +1685,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	      <ha-card>
 	        <div class="wrap">
 	          ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
-	          ${this._ui && this._ui.conflict ? `<div class="conflict">${this._escape(String(this._ui.conflict || ""))}</div>` : ""}
-	          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
+		          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
 
 		          <div class="header">
 		            <div class="h-title">${this._escape(String(title || ""))}</div>

@@ -160,3 +160,7 @@ All notable changes to this project will be documented in this file.
 ## 0.2.6 - 2026-02-14
 
 - UI: day list (left) now uses compact card boxes matching the workout item style (right), without increasing height.
+
+## 0.2.7 - 2026-02-14
+
+- UX: auto-reload state on `rev` conflicts (no more "Tap Reload" / restart-like prompts in Settings).
