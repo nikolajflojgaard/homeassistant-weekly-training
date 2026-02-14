@@ -126,3 +126,9 @@ All notable changes to this project will be documented in this file.
   - History viewer in Settings.
 - Backup:
   - Import/Export people + exercise settings from Settings.
+
+## 0.2.1 - 2026-02-14
+
+- Swipe UI: right-panel swipe feedback colors
+  - Swipe right shows a green background (complete)
+  - Swipe left shows a red background (delete)

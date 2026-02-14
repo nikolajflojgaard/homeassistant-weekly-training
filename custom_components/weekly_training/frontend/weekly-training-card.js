@@ -1427,8 +1427,43 @@ class WeeklyTrainingCard extends HTMLElement {
         .empty-title { font-size: 14px; font-weight: 700; color: var(--primary-text-color); }
         .empty-sub { margin-top: 6px; font-size: 12px; color: var(--secondary-text-color); }
 	        .items { margin-top: 12px; display:flex; flex-direction:column; gap: 10px; }
-		        .item { border: 1px solid var(--wt-border); border-radius: var(--wt-radius-sm); padding: 12px; background: var(--wt-subtle2); }
+	        .item { border: 1px solid var(--wt-border); border-radius: var(--wt-radius-sm); padding: 12px; background: var(--wt-subtle2); }
 	        .item .ex { font-weight: 900; font-size: 13px; }
+	        .swipable { position: relative; overflow: hidden; }
+	        .swipe-bg {
+	          position: absolute;
+	          inset: 0;
+	          border-radius: var(--wt-radius-sm);
+	          background: transparent;
+	          opacity: var(--swipe-p, 0);
+	          transform: translateX(0);
+	          transition: opacity 90ms ease;
+	          pointer-events: none;
+	          display:flex;
+	          align-items:center;
+	          justify-content:center;
+	          z-index: 0;
+	        }
+	        .swipable > .item { position: relative; z-index: 1; }
+	        .swipe-bubble {
+	          border: 1px solid rgba(var(--rgb-primary-text-color, 0, 0, 0), 0.12);
+	          background: rgba(var(--rgb-card-background-color, 255,255,255), 0.75);
+	          backdrop-filter: blur(3px);
+	          border-radius: 999px;
+	          padding: 10px 14px;
+	          font-weight: 900;
+	          font-size: 13px;
+	          color: var(--primary-text-color);
+	          box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+	          min-width: 180px;
+	          text-align: center;
+	        }
+	        .swipe-bg.right {
+	          background: rgba(var(--rgb-success-color, 46, 125, 50), 0.18);
+	        }
+	        .swipe-bg.left {
+	          background: rgba(var(--rgb-error-color, 211, 47, 47), 0.18);
+	        }
         .actions { display:flex; gap: 8px; flex-wrap:wrap; }
 	        .actions button {
 	          font: inherit;
@@ -1674,14 +1709,17 @@ class WeeklyTrainingCard extends HTMLElement {
 		                </div>
 		                <div class="pill">${selectedWorkout ? "Workout" : "Empty"}</div>
 		              </div>
-		              ${selectedWorkout ? `
-		                <div class="swipehint">Swipe right: completed. Swipe left: delete.</div>
-		                <div class="items" id="swipe-zone">
-		                  ${(Array.isArray(selectedWorkout.items) ? selectedWorkout.items : []).map((it) => {
-		                    if (!it || typeof it !== "object") return "";
-		                    const ex = String(it.exercise || "");
-		                    const sr = String(it.sets_reps || "");
-		                    const load = it.suggested_load != null ? String(it.suggested_load) : "";
+			              ${selectedWorkout ? `
+			                <div class="swipehint">Swipe right: completed. Swipe left: delete.</div>
+			                <div class="items swipable" id="swipe-zone">
+			                  <div class="swipe-bg" id="swipe-bg" aria-hidden="true">
+			                    <div class="swipe-bubble" id="swipe-bubble"></div>
+			                  </div>
+			                  ${(Array.isArray(selectedWorkout.items) ? selectedWorkout.items : []).map((it) => {
+			                    if (!it || typeof it !== "object") return "";
+			                    const ex = String(it.exercise || "");
+			                    const sr = String(it.sets_reps || "");
+			                    const load = it.suggested_load != null ? String(it.suggested_load) : "";
 		                    return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
 		                  }).join("")}
 		                </div>
@@ -1892,40 +1930,78 @@ class WeeklyTrainingCard extends HTMLElement {
     });
 
     // Swipe actions on the generated workout (tablet-first).
-    const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
-	    if (swipeZone && selectedWorkout) {
-	      const pid = String(this._activePersonId() || "");
-	      const wk = String(weekStartIso || "").slice(0, 10);
-	      const dateIso = String(selectedWorkout.date || "");
-      swipeZone.addEventListener("touchstart", (e) => {
-        try {
-          const t = e.touches && e.touches[0];
-          if (t) this._ui.swipeX = Number(t.clientX) || 0;
-        } catch (_) {}
-      }, { passive: true });
-      swipeZone.addEventListener("touchend", async (e) => {
-        try {
-          const t = e.changedTouches && e.changedTouches[0];
-          if (!t) return;
-          const dx = (Number(t.clientX) || 0) - Number(this._ui.swipeX || 0);
-          const threshold = 80;
-          if (Math.abs(dx) < threshold) return;
-	          if (!pid || !wk || !dateIso) return;
-	          if (dx > 0) {
-	            const next = !Boolean(selectedWorkout.completed);
-	            await this._setWorkoutCompleted(pid, wk, dateIso, next);
-	            if (next) {
-	              this._showToast("Marked completed", "Undo", { kind: "toggle_completed", person_id: pid, week_start: wk, date: dateIso, completed: false });
-	            }
-	          } else {
-	            const ok = window.confirm("Delete this workout?");
-	            if (!ok) return;
-	            const snapshot = JSON.parse(JSON.stringify(selectedWorkout));
-	            await this._deleteWorkout(pid, wk, dateIso);
-	            this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid, week_start: wk, workout: snapshot });
-	          }
+	    const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
+		    if (swipeZone && selectedWorkout) {
+		      const pid = String(this._activePersonId() || "");
+		      const wk = String(weekStartIso || "").slice(0, 10);
+		      const dateIso = String(selectedWorkout.date || "");
+		      const bg = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-bg") : null;
+		      const bubble = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-bubble") : null;
+		      const clearSwipeUI = () => {
+		        try {
+		          swipeZone.style.setProperty("--swipe-p", "0");
+		          if (bg) { bg.classList.remove("left"); bg.classList.remove("right"); }
+		          if (bubble) bubble.textContent = "";
+		        } catch (_) {}
+		      };
+		      clearSwipeUI();
+	      swipeZone.addEventListener("touchstart", (e) => {
+	        try {
+	          const t = e.touches && e.touches[0];
+	          if (t) this._ui.swipeX = Number(t.clientX) || 0;
 	        } catch (_) {}
 	      }, { passive: true });
+	      swipeZone.addEventListener("touchmove", (e) => {
+	        try {
+	          const t = e.touches && e.touches[0];
+	          if (!t) return;
+	          const dx = (Number(t.clientX) || 0) - Number(this._ui.swipeX || 0);
+	          const adx = Math.abs(dx);
+	          const p = Math.max(0, Math.min(1, adx / 110));
+	          swipeZone.style.setProperty("--swipe-p", String(p));
+	          if (!bg || !bubble) return;
+	          if (dx > 0) {
+	            bg.classList.add("right");
+	            bg.classList.remove("left");
+	            bubble.textContent = "Release to complete";
+	          } else if (dx < 0) {
+	            bg.classList.add("left");
+	            bg.classList.remove("right");
+	            bubble.textContent = "Release to delete";
+	          } else {
+	            bg.classList.remove("left");
+	            bg.classList.remove("right");
+	            bubble.textContent = "";
+	          }
+	          // Prevent vertical scroll when the user is clearly swiping horizontally.
+	          if (adx > 12 && typeof e.preventDefault === "function") e.preventDefault();
+	        } catch (_) {}
+	      }, { passive: false });
+	      swipeZone.addEventListener("touchend", async (e) => {
+	        try {
+	          const t = e.changedTouches && e.changedTouches[0];
+	          if (!t) return;
+	          const dx = (Number(t.clientX) || 0) - Number(this._ui.swipeX || 0);
+	          const threshold = 80;
+	          if (Math.abs(dx) < threshold) { clearSwipeUI(); return; }
+		          if (!pid || !wk || !dateIso) return;
+		          if (dx > 0) {
+		            const next = !Boolean(selectedWorkout.completed);
+		            await this._setWorkoutCompleted(pid, wk, dateIso, next);
+		            if (next) {
+		              this._showToast("Marked completed", "Undo", { kind: "toggle_completed", person_id: pid, week_start: wk, date: dateIso, completed: false });
+		            }
+		          } else {
+		            const ok = window.confirm("Delete this workout?");
+		            if (!ok) return;
+		            const snapshot = JSON.parse(JSON.stringify(selectedWorkout));
+		            await this._deleteWorkout(pid, wk, dateIso);
+		            this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid, week_start: wk, workout: snapshot });
+		          }
+		          clearSwipeUI();
+	        } catch (_) {}
+	      }, { passive: true });
+	      swipeZone.addEventListener("touchcancel", () => { clearSwipeUI(); }, { passive: true });
 	    }
 
 	    // Settings modal
