@@ -164,3 +164,10 @@ All notable changes to this project will be documented in this file.
 ## 0.2.7 - 2026-02-14
 
 - UX: auto-reload state on `rev` conflicts (no more "Tap Reload" / restart-like prompts in Settings).
+
+## 0.2.8 - 2026-02-14
+
+- Settings:
+  - Adding a custom exercise updates the grouped grid immediately (no need to Save + reopen).
+  - Custom list action renamed to **Delete** and styled red.
+- UI: popup buttons now use consistent pill styling matching the rest of the UI (Delete stays red).

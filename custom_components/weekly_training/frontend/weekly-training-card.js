@@ -951,15 +951,34 @@ class WeeklyTrainingCard extends HTMLElement {
 	      </div>
 	    ` : "";
 
-	    const settingsModal = this._ui.showSettings ? (() => {
+		    const settingsModal = this._ui.showSettings ? (() => {
 	      const draft = this._settingsDraft || { disabled: new Set(), custom: [], query: "", new_custom: { name: "", group: "Core", tags: "", equipment: "" } };
-      const exercises = Array.isArray(this._library) ? this._library : [];
-      const grouped = this._groupExercisesForSettings(exercises);
+      const base = Array.isArray(this._library) ? this._library : [];
+      const customDraft = Array.isArray(draft.custom) ? draft.custom : [];
+      // Include custom draft exercises in the grouped grid immediately (no save/reopen needed).
+      // De-dupe by name (case-insensitive), prefer custom draft when colliding.
+      const merged = (() => {
+        const map = new Map();
+        for (const ex of base) {
+          if (!ex || typeof ex !== "object") continue;
+          const nm = String(ex.name || "").trim();
+          if (!nm) continue;
+          map.set(nm.toLowerCase(), ex);
+        }
+        for (const ex of customDraft) {
+          if (!ex || typeof ex !== "object") continue;
+          const nm = String(ex.name || "").trim();
+          if (!nm) continue;
+          map.set(nm.toLowerCase(), { ...ex, custom: true });
+        }
+        return Array.from(map.values());
+      })();
+      const grouped = this._groupExercisesForSettings(merged);
 
-      const custom = Array.isArray(draft.custom) ? draft.custom : [];
+      const custom = customDraft;
       return `
         <div class="modal-backdrop" id="settings-backdrop" aria-hidden="false">
-	          <div class="modal" role="dialog" aria-label="Exercise settings">
+          <div class="modal" role="dialog" aria-label="Exercise settings">
 	            <div class="modal-h">
 	              <div class="modal-title">Exercise settings</div>
 	              <button class="icon-btn" id="settings-close" title="Close">\u00d7</button>
@@ -1012,7 +1031,7 @@ class WeeklyTrainingCard extends HTMLElement {
                 <div class="xlist">
                   ${custom.map((ex, idx) => {
                     const nm = String((ex && ex.name) || "");
-                    return `<div class="xcustom"><div>${this._escape(nm)}</div><button class="icon-btn" data-custom-del="${idx}" ${saving ? "disabled" : ""}>Remove</button></div>`;
+                    return `<div class="xcustom"><div>${this._escape(nm)}</div><button class="pillbtn danger" data-custom-del="${idx}" ${saving ? "disabled" : ""}>Delete</button></div>`;
                   }).join("")}
                 </div>
               ` : `<div class="muted">No custom exercises yet.</div>`}
@@ -1506,15 +1525,16 @@ class WeeklyTrainingCard extends HTMLElement {
 	          background: rgba(var(--rgb-error-color, 211, 47, 47), 0.18);
 	        }
         .actions { display:flex; gap: 8px; flex-wrap:wrap; }
-	        .actions button {
-	          font: inherit;
-	          border: 1px solid var(--wt-border);
-	          border-radius: var(--wt-radius-sm);
-	          padding: 10px 12px;
-	          background: var(--wt-surface);
-	          color: var(--primary-text-color);
-	          cursor: pointer;
-	        }
+		        .actions button {
+		          font: inherit;
+		          border: 1px solid var(--wt-border);
+		          border-radius: 999px;
+		          padding: 9px 14px;
+		          background: var(--wt-surface);
+		          color: var(--primary-text-color);
+		          cursor: pointer;
+		          min-height: 40px;
+		        }
 	        .actions button.primary {
 	          background: var(--primary-color);
 	          border-color: var(--primary-color);
@@ -1526,7 +1546,24 @@ class WeeklyTrainingCard extends HTMLElement {
 	          color: var(--text-primary-color, #fff);
 	          font-weight: 900;
 	        }
-        .actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+	        .actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+	        .pillbtn {
+	          font: inherit;
+	          border: 1px solid var(--wt-border);
+	          border-radius: 999px;
+	          padding: 7px 12px;
+	          background: var(--wt-surface);
+	          color: var(--primary-text-color);
+	          cursor: pointer;
+	          min-height: 34px;
+	        }
+	        .pillbtn:disabled { opacity: 0.6; cursor: not-allowed; }
+	        .pillbtn.danger {
+	          background: var(--error-color);
+	          border-color: var(--error-color);
+	          color: var(--text-primary-color, #fff);
+	          font-weight: 900;
+	        }
         .label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
 	        select, input {
 	          width: 100%;
@@ -1607,7 +1644,30 @@ class WeeklyTrainingCard extends HTMLElement {
 	          gap: 10px;
 	        }
 	        .modal-f > span { flex: 1 1 auto; }
-	        .modal-f button { min-width: 96px; }
+	        .modal-f button {
+	          font: inherit;
+	          border: 1px solid var(--wt-border);
+	          border-radius: 999px;
+	          padding: 9px 14px;
+	          background: var(--wt-surface);
+	          color: var(--primary-text-color);
+	          cursor: pointer;
+	          min-height: 40px;
+	          min-width: 96px;
+	        }
+	        .modal-f button.primary {
+	          background: var(--primary-color);
+	          border-color: var(--primary-color);
+	          color: var(--text-primary-color, #fff);
+	          font-weight: 800;
+	        }
+	        .modal-f button.danger {
+	          background: var(--error-color);
+	          border-color: var(--error-color);
+	          color: var(--text-primary-color, #fff);
+	          font-weight: 900;
+	        }
+	        .modal-f button:disabled { opacity: 0.6; cursor: not-allowed; }
 	        .snack{
 	          position: sticky;
 	          bottom: 12px;
