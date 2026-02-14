@@ -252,3 +252,8 @@ All notable changes to this project will be documented in this file.
 - Hardening: show **card/backend version mismatch** in UI and block write actions to prevent stale cached JS from corrupting state.
 - UX: Cycle planner split now **auto-suggests training weekdays** (unless you customize them).
 - Dev: add basic planner tests for split rotation and "no front squat" rule.
+
+## 0.3.14 - 2026-02-14
+
+- People: updating 1RM maxes now recalculates suggested loads for all workouts in the person's active 4-week cycle.
+- Workout details: add **Delete series** button for cycle workouts (same series delete as swipe-left).

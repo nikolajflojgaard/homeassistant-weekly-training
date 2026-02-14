@@ -21,6 +21,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .planner import recompute_workout_loads
 from .const import (
     DEFAULT_DURATION_MINUTES,
     DEFAULT_EQUIPMENT,
@@ -141,6 +142,83 @@ def _trim_history(items: list[dict[str, Any]], *, keep: int = 4) -> list[dict[st
         if len(out) >= max(0, int(keep)):
             break
     return out
+
+
+def _recompute_cycle_workout_loads_for_person(state: dict[str, Any], *, person: dict[str, Any]) -> bool:
+    """Update suggested loads for workouts in the active cycle window for this person."""
+    cy = person.get("cycle")
+    if not isinstance(cy, dict) or not bool(cy.get("enabled")):
+        return False
+    start_raw = str(cy.get("start_week_start") or "").strip()[:10]
+    if not start_raw:
+        return False
+    try:
+        start_ws = date.fromisoformat(start_raw)
+    except Exception:  # noqa: BLE001
+        return False
+    try:
+        weeks = max(1, min(12, int(cy.get("weeks") or 4)))
+    except Exception:  # noqa: BLE001
+        weeks = 4
+    tdays = cy.get("training_weekdays")
+    if not isinstance(tdays, list) or not tdays:
+        return False
+    training_weekdays: list[int] = []
+    for x in tdays:
+        try:
+            xi = int(x)
+        except Exception:  # noqa: BLE001
+            continue
+        if 0 <= xi <= 6 and xi not in training_weekdays:
+            training_weekdays.append(xi)
+    training_weekdays.sort()
+    if not training_weekdays:
+        return False
+
+    plans = state.get("plans")
+    if not isinstance(plans, dict):
+        return False
+    pid = str(person.get("id") or "").strip()
+    if not pid:
+        return False
+    person_plans = plans.get(pid)
+    if not isinstance(person_plans, dict):
+        return False
+
+    target_dates: set[str] = set()
+    for i in range(weeks):
+        wk = start_ws + timedelta(days=i * 7)
+        for wd in training_weekdays:
+            target_dates.add((wk + timedelta(days=int(wd))).isoformat())
+
+    changed = False
+    for wk_key, plan in list(person_plans.items()):
+        if not isinstance(plan, dict):
+            continue
+        workouts = plan.get("workouts")
+        if not isinstance(workouts, list) or not workouts:
+            continue
+        next_workouts: list[dict[str, Any]] = []
+        did = False
+        for w in workouts:
+            if not isinstance(w, dict):
+                continue
+            d = str(w.get("date") or "")
+            if d and d in target_dates and isinstance(w.get("cycle"), dict) and bool(w["cycle"].get("enabled")):
+                next_workouts.append(recompute_workout_loads(profile=person, workout=w, cycle_cfg=cy))
+                did = True
+            else:
+                next_workouts.append(w)
+        if did:
+            plan2 = dict(plan)
+            plan2["workouts"] = next_workouts
+            person_plans[wk_key] = plan2
+            changed = True
+
+    if changed:
+        plans[pid] = person_plans
+        state["plans"] = plans
+    return changed
 
 
 def _new_person(
@@ -606,6 +684,7 @@ class WeeklyTrainingStore:
             person = {**_new_person(name=str(person.get("name") or "Person")), **person}
             incoming_id = str(person.get("id") or "")
         existing = next((p for p in people if isinstance(p, dict) and str(p.get("id") or "") == incoming_id), None)
+        prev_maxes = existing.get("maxes") if isinstance(existing, dict) and isinstance(existing.get("maxes"), dict) else {}
 
         now = _now_iso()
         normalized = dict(person)
@@ -636,6 +715,11 @@ class WeeklyTrainingStore:
             "deadlift": int(maxes.get("deadlift") or DEFAULT_MAX_DL),
             "bench": int(maxes.get("bench") or DEFAULT_MAX_BP),
         }
+        maxes_changed = (
+            int(prev_maxes.get("squat") or 0) != int(normalized["maxes"].get("squat") or 0)
+            or int(prev_maxes.get("deadlift") or 0) != int(normalized["maxes"].get("deadlift") or 0)
+            or int(prev_maxes.get("bench") or 0) != int(normalized["maxes"].get("bench") or 0)
+        )
         normalized["updated_at"] = now
         normalized.setdefault("created_at", now)
 
@@ -651,6 +735,12 @@ class WeeklyTrainingStore:
         state["people"] = people
         if not state.get("active_person_id"):
             state["active_person_id"] = incoming_id
+        # If user updated 1RM maxes, recompute suggested loads for workouts in the active cycle window.
+        if maxes_changed:
+            try:
+                _recompute_cycle_workout_loads_for_person(state, person=normalized)
+            except Exception:  # noqa: BLE001
+                pass
         return await self.async_save(state)
 
     async def async_delete_person(self, person_id: str, *, expected_rev: int | None = None) -> dict[str, Any]:

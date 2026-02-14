@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.13";
+const CARD_VERSION = "0.3.14";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -1478,18 +1478,19 @@ class WeeklyTrainingCard extends HTMLElement {
 	      `;
 	    })() : "";
 
-	    const editWorkoutModal = this._ui.showEditWorkout && this._ui.editWorkout ? (() => {
-	      const d = this._ui.editWorkout || {};
-	      const pid = String(d.person_id || "");
-	      const wk = String(d.week_start || "").slice(0, 10);
-	      const w = d.workout && typeof d.workout === "object" ? d.workout : {};
-	      const dateIso = String(w.date || "");
-	      const wname = String(w.name || "Workout");
-	      const items = Array.isArray(w.items) ? w.items : [];
-	      const person = this._personById(pid);
-	      const pname = person ? String(person.name || "") : "";
-	      const pcolor = person ? this._personColor(person) : "";
-	      return `
+		    const editWorkoutModal = this._ui.showEditWorkout && this._ui.editWorkout ? (() => {
+		      const d = this._ui.editWorkout || {};
+		      const pid = String(d.person_id || "");
+		      const wk = String(d.week_start || "").slice(0, 10);
+		      const w = d.workout && typeof d.workout === "object" ? d.workout : {};
+		      const dateIso = String(w.date || "");
+		      const wname = String(w.name || "Workout");
+		      const items = Array.isArray(w.items) ? w.items : [];
+		      const person = this._personById(pid);
+		      const pname = person ? String(person.name || "") : "";
+		      const pcolor = person ? this._personColor(person) : "";
+		      const isSeries = Boolean(w && w.cycle && typeof w.cycle === "object" && w.cycle.enabled);
+		      return `
 	        <div class="modal-backdrop" id="editw-backdrop" aria-hidden="false">
 	          <div class="modal" role="dialog" aria-label="Edit workout">
 	            <div class="modal-h">
@@ -1534,14 +1535,15 @@ class WeeklyTrainingCard extends HTMLElement {
 	                  `;
 	                }).join("")}
 	              </div>
-	            </div>
-	            <div class="modal-f">
-	              <button class="danger" id="editw-delete" ${saving ? "disabled" : ""}>Delete</button>
-	              <div class="actions" style="margin:0">
-	                <button id="editw-cancel" ${saving ? "disabled" : ""}>Close</button>
-	                <button class="primary" id="editw-save" ${saving ? "disabled" : ""}>Save</button>
-	              </div>
-	            </div>
+		            </div>
+		            <div class="modal-f">
+		              <button class="danger" id="editw-delete" ${saving ? "disabled" : ""}>Delete</button>
+		              ${isSeries ? `<button class="danger" id="editw-delete-series" ${saving ? "disabled" : ""}>Delete series</button>` : ``}
+		              <div class="actions" style="margin:0">
+		                <button id="editw-cancel" ${saving ? "disabled" : ""}>Close</button>
+		                <button class="primary" id="editw-save" ${saving ? "disabled" : ""}>Save</button>
+		              </div>
+		            </div>
 	          </div>
 	        </div>
 	      `;
@@ -2989,6 +2991,19 @@ class WeeklyTrainingCard extends HTMLElement {
 	    if (qEwSave) qEwSave.addEventListener("click", () => { this._saveEditedWorkout(); });
 	    const qEwDel = this.shadowRoot ? this.shadowRoot.querySelector("#editw-delete") : null;
 	    if (qEwDel) qEwDel.addEventListener("click", () => { this._deleteEditedWorkout(); });
+	    const qEwDelSeries = this.shadowRoot ? this.shadowRoot.querySelector("#editw-delete-series") : null;
+	    if (qEwDelSeries) qEwDelSeries.addEventListener("click", () => {
+	      const d = this._ui && this._ui.editWorkout ? this._ui.editWorkout : null;
+	      if (!d) return;
+	      const pid = String(d.person_id || "");
+	      const wk = String(d.week_start || "").slice(0, 10);
+	      const w = d.workout && typeof d.workout === "object" ? d.workout : null;
+	      if (!pid || !wk || !w) return;
+	      // Close the details modal and open the same "single vs series" delete chooser.
+	      this._ui.showEditWorkout = false;
+	      this._ui.editWorkout = null;
+	      this._openDeleteChoiceForWorkout(pid, wk, w);
+	    });
 
 	    // Confirm delete modal (single vs series)
 	    const qCfdClose = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-close") : null;

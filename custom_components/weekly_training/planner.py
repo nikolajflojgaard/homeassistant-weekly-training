@@ -706,3 +706,124 @@ def generate_session(
     plan["workouts"] = workouts
     plan["markdown"] = _render_markdown(week_number=week_number, week_start=week_start_day.isoformat(), plan=plan)
     return plan
+
+
+def recompute_workout_loads(
+    *,
+    profile: dict[str, Any],
+    workout: dict[str, Any],
+    cycle_cfg: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Recompute suggested loads for an existing workout.
+
+    Used when a user updates their 1RM maxes after workouts were generated.
+    We only update `suggested_load` (and `units`) and keep exercise selection,
+    sets/reps and ordering unchanged.
+    """
+    if not isinstance(workout, dict):
+        return workout
+    units = str(profile.get("units") or "kg").lower()
+    intensity = str(workout.get("intensity") or "normal").lower()
+    items = workout.get("items")
+    if not isinstance(items, list) or not items:
+        return workout
+
+    maxes = profile.get("maxes") if isinstance(profile.get("maxes"), dict) else {}
+    max_sq = float(maxes.get("squat") or 0)
+    max_dl = float(maxes.get("deadlift") or 0)
+    max_bp = float(maxes.get("bench") or 0)
+
+    def _round_load(value: float) -> float:
+        inc = 2.5 if units == "kg" else 5.0
+        if value <= 0:
+            return 0.0
+        return round(value / inc) * inc
+
+    def _main_pct_base() -> float:
+        if intensity == "easy":
+            return 0.65
+        if intensity == "hard":
+            return 0.80
+        return 0.75
+
+    cyw = workout.get("cycle") if isinstance(workout.get("cycle"), dict) else {}
+    cy_enabled = bool(cyw.get("enabled")) if isinstance(cyw.get("enabled"), bool) else False
+    week_index = int(cyw.get("week_index") or 0)
+    is_deload = bool(cyw.get("is_deload")) if isinstance(cyw.get("is_deload"), bool) else (week_index == 3)
+
+    step_pct = 2.5
+    deload_pct = 10.0
+    if isinstance(cycle_cfg, dict):
+        try:
+            if cycle_cfg.get("step_pct") is not None:
+                step_pct = float(cycle_cfg.get("step_pct"))
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            if cycle_cfg.get("deload_pct") is not None:
+                deload_pct = float(cycle_cfg.get("deload_pct"))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _factor_for_cycle() -> float:
+        if not cy_enabled:
+            return 1.0
+        if is_deload:
+            try:
+                f = 1.0 - (max(0.0, float(deload_pct)) / 100.0)
+                return max(0.80, min(1.25, f))
+            except Exception:  # noqa: BLE001
+                return 1.0
+        try:
+            up = float(step_pct) * float(min(2, max(0, int(week_index))))
+            f = 1.0 + (up / 100.0)
+            return max(0.80, min(1.25, f))
+        except Exception:  # noqa: BLE001
+            return 1.0
+
+    cycle_factor = _factor_for_cycle()
+
+    def _suggested_load(exercise_name: str, kind: str) -> float | None:
+        name = str(exercise_name or "").lower()
+        main_pct = _main_pct_base()
+        if kind == "main_lower_light":
+            main_pct = main_pct * 0.92
+        main_pct = main_pct * cycle_factor
+
+        if "squat" in name:
+            base = max_sq
+            if "front squat" in name:
+                base = max_sq * 0.85
+            return _round_load(base * main_pct) if base else None
+        if "deadlift" in name:
+            base = max_dl
+            if "romanian" in name:
+                base = max_dl * 0.65
+            return _round_load(base * main_pct) if base else None
+        if "bench" in name:
+            base = max_bp
+            return _round_load(base * main_pct) if base else None
+        if "overhead press" in name or name == "press":
+            base = max_bp * 0.65 if max_bp else 0
+            return _round_load(base * main_pct) if base else None
+        return None
+
+    next_items: list[dict[str, Any]] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ex = str(it.get("exercise") or "")
+        kind = str(it.get("type") or "")
+        nxt = dict(it)
+        load = _suggested_load(ex, kind)
+        if load is not None and load > 0:
+            nxt["suggested_load"] = load
+            nxt["units"] = units
+        else:
+            nxt.pop("suggested_load", None)
+            nxt.pop("units", None)
+        next_items.append(nxt)
+
+    out = dict(workout)
+    out["items"] = next_items
+    return out
