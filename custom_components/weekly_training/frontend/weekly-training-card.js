@@ -62,6 +62,14 @@ class WeeklyTrainingCard extends HTMLElement {
     this._focusKey = "";
     this._focusSelStart = null;
     this._focusSelEnd = null;
+
+    // UI state (purely client-side).
+    this._ui = {
+      showPeople: false,
+      showWorkout: false,
+      workoutDay: null, // 0..6
+      selectedDay: null, // 0..6
+    };
   }
 
   setConfig(config) {
@@ -69,6 +77,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._config = {
       title: config.title || "Weekly Training",
       entry_id: config.entry_id || "",
+      max_width: config.max_width || "",
     };
     this._entryId = this._config.entry_id || "";
     this._render();
@@ -257,10 +266,41 @@ class WeeklyTrainingCard extends HTMLElement {
       const res = await this._callWS({
         type: "weekly_training/add_person",
         entry_id: this._entryId,
-        person: { ...this._newPerson, name },
+        person: {
+          name,
+          gender: String(this._newPerson.gender || "male"),
+          units: String(this._newPerson.units || "kg"),
+          duration_minutes: Number(this._newPerson.duration_minutes || 45),
+          preferred_exercises: String(this._newPerson.preferred_exercises || ""),
+          equipment: String(this._newPerson.equipment || ""),
+          maxes: {
+            squat: Number(this._newPerson.max_squat || 0),
+            deadlift: Number(this._newPerson.max_deadlift || 0),
+            bench: Number(this._newPerson.max_bench || 0),
+          },
+        },
       });
       this._state = res?.state || this._state;
       this._newPerson.name = "";
+      this._applyStateToDraft();
+    } catch (e) {
+      this._error = String(e?.message || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  async _deletePerson(personId) {
+    this._captureFocus();
+    const pid = String(personId || "");
+    if (!pid) return;
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      const res = await this._callWS({ type: "weekly_training/delete_person", entry_id: this._entryId, person_id: pid });
+      this._state = res?.state || this._state;
       this._applyStateToDraft();
     } catch (e) {
       this._error = String(e?.message || e);
@@ -293,66 +333,218 @@ class WeeklyTrainingCard extends HTMLElement {
     const plan = this._activePlan();
     const planningMode = String(this._draft.planning_mode || "auto");
     const manual = planningMode === "manual";
+
     const runtime = this._state?.runtime || {};
     const currentWeekNumber = Number(runtime.current_week_number || 0);
-    const weekLabel = currentWeekNumber ? `Week ${currentWeekNumber + Number(this._weekOffset || 0)}` : "Week";
+    const weekStartIso = String(runtime.current_week_start || "");
+    const weekLabel = currentWeekNumber ? `Week ${currentWeekNumber}` : "Week";
+    const weekRange = weekStartIso ? this._formatWeekRange(weekStartIso) : "";
+
     const todayIso = String(runtime.today || "");
     const todayW = todayIso ? new Date(todayIso + "T00:00:00Z").getUTCDay() : null;
-    // Convert JS Sunday=0 to our Monday=0
-    const todayWeekday = todayW == null ? null : ((todayW + 6) % 7);
-    const selectedWeekday = this._selectedWeekday == null ? todayWeekday : Number(this._selectedWeekday);
+    const todayWeekday = todayW == null ? 0 : ((todayW + 6) % 7);
+    const selectedDay = this._ui.selectedDay != null ? Number(this._ui.selectedDay) : Number(todayWeekday);
 
-    const peopleOptions = people
-      .map((p) => ({ id: String(p.id || ""), name: String(p.name || "") }))
-      .filter((p) => p.id && p.name);
+    const activePerson = people.find((p) => String(p?.id || "") === activeId) || null;
+    const activeName = activePerson ? String(activePerson.name || "") : "";
 
-    const planMarkdown = String(plan?.markdown || "");
+    const workouts = Array.isArray(plan?.workouts) ? plan.workouts : [];
+    const workoutsByDay = {};
+    const ws = weekStartIso ? new Date(weekStartIso + "T00:00:00Z") : null;
+    for (const w of workouts) {
+      if (!w || typeof w !== "object") continue;
+      const dIso = String(w.date || "");
+      if (!dIso || !ws) continue;
+      const d = new Date(dIso + "T00:00:00Z");
+      const diffDays = Math.round((d.getTime() - ws.getTime()) / (24 * 3600 * 1000));
+      if (diffDays >= 0 && diffDays <= 6) workoutsByDay[diffDays] = w;
+    }
+    const selectedWorkout = workoutsByDay[selectedDay] || null;
 
-    const sessionSlots = [
-      { slot: "a_lower", label: "A lower" },
-      { slot: "a_push", label: "A push" },
-      { slot: "a_pull", label: "A pull" },
-      { slot: "b_lower", label: "B lower" },
-      { slot: "b_push", label: "B push" },
-      { slot: "b_pull", label: "B pull" },
-      { slot: "c_lower", label: "C lower" },
-      { slot: "c_push", label: "C push" },
-      { slot: "c_pull", label: "C pull" },
-    ];
+    const daysDa = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "L\u00f8rdag", "S\u00f8ndag"];
+
+    const maxWidthRaw = String(this._config?.max_width || "").trim();
+    const maxWidthCss = maxWidthRaw ? this._cssSize(maxWidthRaw) : "";
+
+    const peopleModal = this._ui.showPeople ? `
+      <div class="modal-backdrop" id="people-backdrop" aria-hidden="false">
+        <div class="modal" role="dialog" aria-label="People">
+          <div class="modal-h">
+            <div class="modal-title">People</div>
+            <button class="icon-btn" id="people-close" title="Close">\u00d7</button>
+          </div>
+          <div class="modal-b">
+            <div class="label">Active person</div>
+            <div class="chiprow">
+              ${people.map((p) => {
+                const pid = String(p?.id || "");
+                const nm = String(p?.name || "");
+                const initial = (nm || "?").slice(0, 1).toUpperCase();
+                const active = pid === activeId;
+                return `<button class="chip ${active ? "active" : ""}" data-person="${this._escape(pid)}" ${saving ? "disabled" : ""}><span class="avatar">${this._escape(initial)}</span>${this._escape(nm || pid)}</button>`;
+              }).join("")}
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="label">Add person</div>
+            <div class="row compact">
+              <div>
+                <div class="label">Name</div>
+                <input data-focus-key="p_name" id="p-name" type="text" placeholder="Name" value="${this._escape(String(this._newPerson.name || ""))}" ${saving ? "disabled" : ""} />
+              </div>
+              <div>
+                <div class="label">Gender</div>
+                <select data-focus-key="p_gender" id="p-gender" ${saving ? "disabled" : ""}>
+                  <option value="male" ${String(this._newPerson.gender || "male") === "male" ? "selected" : ""}>Male</option>
+                  <option value="female" ${String(this._newPerson.gender || "male") === "female" ? "selected" : ""}>Female</option>
+                </select>
+              </div>
+              <div>
+                <div class="label">Units</div>
+                <select data-focus-key="p_units" id="p-units" ${saving ? "disabled" : ""}>
+                  <option value="kg" ${String(this._newPerson.units || "kg") === "kg" ? "selected" : ""}>kg</option>
+                  <option value="lb" ${String(this._newPerson.units || "kg") === "lb" ? "selected" : ""}>lb</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row compact">
+              <div>
+                <div class="label">Default session minutes</div>
+                <input data-focus-key="p_minutes" id="p-minutes" type="number" min="20" max="120" step="5" value="${this._escape(String(this._newPerson.duration_minutes || 45))}" ${saving ? "disabled" : ""} />
+              </div>
+              <div>
+                <div class="label">Equipment (CSV)</div>
+                <input data-focus-key="p_equipment" id="p-equipment" type="text" placeholder="bodyweight, barbell, dumbbell, band" value="${this._escape(String(this._newPerson.equipment || ""))}" ${saving ? "disabled" : ""} />
+              </div>
+            </div>
+
+            <div>
+              <div class="label">Preferred exercises/tags (CSV)</div>
+              <input data-focus-key="p_pref" id="p-pref" type="text" placeholder="e.g. squat, pullup, overhead_press" value="${this._escape(String(this._newPerson.preferred_exercises || ""))}" ${saving ? "disabled" : ""} />
+            </div>
+
+            <div class="row compact" style="margin-top:10px">
+              <div>
+                <div class="label">1RM SQ</div>
+                <input data-focus-key="p_sq" id="p-sq" type="number" min="10" max="500" step="1" value="${this._escape(String(this._newPerson.max_squat ?? 100))}" ${saving ? "disabled" : ""} />
+              </div>
+              <div>
+                <div class="label">1RM DL</div>
+                <input data-focus-key="p_dl" id="p-dl" type="number" min="10" max="600" step="1" value="${this._escape(String(this._newPerson.max_deadlift ?? 120))}" ${saving ? "disabled" : ""} />
+              </div>
+              <div>
+                <div class="label">1RM BP</div>
+                <input data-focus-key="p_bp" id="p-bp" type="number" min="5" max="400" step="1" value="${this._escape(String(this._newPerson.max_bench ?? 80))}" ${saving ? "disabled" : ""} />
+              </div>
+            </div>
+
+            <div class="actions" style="margin-top:12px">
+              <button class="primary" id="p-add" ${saving || !String(this._newPerson.name || "").trim() ? "disabled" : ""}>Add person</button>
+              ${activeId ? `<button id="p-delete" ${saving ? "disabled" : ""}>Delete active</button>` : ""}
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : "";
+
+    const workoutModal = this._ui.showWorkout ? `
+      <div class="modal-backdrop" id="workout-backdrop" aria-hidden="false">
+        <div class="modal" role="dialog" aria-label="Workout">
+          <div class="modal-h">
+            <div class="modal-title">${this._escape(daysDa[selectedDay] || "Day")}</div>
+            <button class="icon-btn" id="workout-close" title="Close">\u00d7</button>
+          </div>
+          <div class="modal-b">
+            <div class="hint">V\u00e6lg detaljer og gener\u00e9r dagens tr\u00e6ningspas. Hvis der allerede findes et pas p\u00e5 dagen, bliver det erstattet.</div>
+            <div class="row compact" style="margin-top:10px">
+              <div>
+                <div class="label">Planning mode</div>
+                <select data-focus-key="w_mode" id="w-mode" ${saving ? "disabled" : ""}>
+                  <option value="auto" ${planningMode === "auto" ? "selected" : ""}>Auto</option>
+                  <option value="manual" ${planningMode === "manual" ? "selected" : ""}>Manual (choose exercises)</option>
+                </select>
+              </div>
+              <div>
+                <div class="label">Session minutes</div>
+                <input data-focus-key="w_minutes" id="w-minutes" type="number" min="20" max="120" step="5" value="${this._escape(String(this._draft.duration_minutes ?? 45))}" ${saving ? "disabled" : ""} />
+              </div>
+            </div>
+
+            <div style="margin-top:10px">
+              <div class="label">Preferred exercises/tags (CSV)</div>
+              <input data-focus-key="w_pref" id="w-pref" type="text" placeholder="e.g. squat, pullup, overhead_press" value="${this._escape(String(this._draft.preferred_exercises || ""))}" ${saving ? "disabled" : ""} />
+            </div>
+
+            <div id="manual-wrap" style="margin-top:10px; ${manual ? "" : "display:none;"}">
+              <div class="label">Manual picks (exercise names)</div>
+              <div class="hint">Regler: Squat og Deadlift mixes ikke i samme uge. Bench m\u00e5 gerne kombineres.</div>
+              <div class="row compact" style="margin-top:8px">
+                <div>
+                  <div class="label">Lower</div>
+                  <input data-focus-key="w_lower" id="w-lower" type="text" placeholder="Auto" value="" ${saving ? "disabled" : ""} />
+                </div>
+                <div>
+                  <div class="label">Push</div>
+                  <input data-focus-key="w_push" id="w-push" type="text" placeholder="Auto" value="" ${saving ? "disabled" : ""} />
+                </div>
+                <div>
+                  <div class="label">Pull</div>
+                  <input data-focus-key="w_pull" id="w-pull" type="text" placeholder="Auto" value="" ${saving ? "disabled" : ""} />
+                </div>
+              </div>
+            </div>
+
+            <div class="actions" style="margin-top:12px">
+              <button class="primary" id="w-generate" ${saving || loading ? "disabled" : ""}>Generate</button>
+              <button id="w-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ` : "";
 
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; }
-        ha-card { overflow:hidden; }
+        ha-card { overflow:hidden; ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)}; margin: 0 auto;` : ""} }
         .wrap { padding: 12px; }
-        .grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 12px;
-        }
-        @media (min-width: 900px) {
-          .grid { grid-template-columns: 1fr 1fr; align-items: start; }
-        }
-        .section {
-          border: 1px solid var(--divider-color);
-          border-radius: 12px;
-          padding: 12px;
-        }
-        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-        .row > * { min-width: 180px; flex: 1 1 180px; }
-        .row.compact > * { min-width: 140px; }
-        .label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
-        select, input, textarea {
+        .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
+        .title { font-size: 18px; font-weight: 600; }
+        .sub { font-size: 12px; color: var(--secondary-text-color); margin-top: 2px; }
+        .muted { color: var(--secondary-text-color); }
+        .top-actions { display:flex; gap: 8px; align-items:center; }
+        .top-actions button { font: inherit; border: 1px solid var(--divider-color); border-radius: 10px; padding: 8px 10px; background: var(--card-background-color); color: var(--primary-text-color); cursor:pointer; }
+        .layout { display:grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12px; }
+        @media (min-width: 900px) { .layout { grid-template-columns: 260px 1fr; } }
+        .days { border: 1px solid var(--divider-color); border-radius: 12px; overflow: hidden; }
+        .day {
           width: 100%;
-          box-sizing: border-box;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 10px;
           font: inherit;
-          border: 1px solid var(--divider-color);
-          border-radius: 10px;
-          padding: 10px;
+          border: 0;
+          border-bottom: 1px solid var(--divider-color);
+          padding: 12px;
           background: var(--card-background-color);
           color: var(--primary-text-color);
+          cursor: pointer;
+          text-align: left;
         }
-        textarea { min-height: 90px; resize: vertical; }
+        .day:last-child { border-bottom: 0; }
+        .day.active { background: var(--secondary-background-color); }
+        .day .meta { display:flex; flex-direction:column; gap: 2px; }
+        .day .name { font-weight: 600; font-size: 13px; }
+        .day .hint2 { font-size: 12px; color: var(--secondary-text-color); }
+        .badge { font-size: 11px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 4px 8px; color: var(--secondary-text-color); }
+        .main { border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px; }
+        .main h3 { margin: 0 0 6px 0; font-size: 16px; }
+        .items { margin-top: 10px; display:flex; flex-direction:column; gap: 8px; }
+        .item { border: 1px solid var(--divider-color); border-radius: 12px; padding: 10px; background: var(--card-background-color); }
+        .item .ex { font-weight: 600; }
         .actions { display:flex; gap: 8px; flex-wrap:wrap; }
         .actions button {
           font: inherit;
@@ -369,231 +561,228 @@ class WeeklyTrainingCard extends HTMLElement {
           color: var(--text-primary-color, #fff);
         }
         .actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .label { font-size: 12px; color: var(--secondary-text-color); margin-bottom: 6px; }
+        select, input {
+          width: 100%;
+          box-sizing: border-box;
+          font: inherit;
+          border: 1px solid var(--divider-color);
+          border-radius: 10px;
+          padding: 10px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+        }
         .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 8px; }
         .error { color: var(--error-color); font-size: 13px; margin-top: 8px; }
-        pre {
-          background: var(--secondary-background-color);
-          border: 1px solid var(--divider-color);
-          border-radius: 12px;
-          padding: 10px;
-          overflow: auto;
-          max-height: 520px;
-          white-space: pre-wrap;
-        }
-        .muted { color: var(--secondary-text-color); }
-        .pill {
-          display:inline-flex;
-          align-items:center;
-          gap: 8px;
-          padding: 6px 10px;
+        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .row > * { min-width: 180px; flex: 1 1 180px; }
+        .row.compact > * { min-width: 140px; }
+        .chiprow { display:flex; gap: 8px; flex-wrap: wrap; }
+        .chip {
+          font: inherit;
           border: 1px solid var(--divider-color);
           border-radius: 999px;
-          font-size: 12px;
-          color: var(--secondary-text-color);
-        }
-        .weekbar { display:flex; align-items:center; justify-content:space-between; gap: 8px; flex-wrap:wrap; }
-        .weeknav { display:flex; gap:8px; align-items:center; }
-        .weeknav button { width: 38px; height: 38px; padding: 0; }
-        .daybar { display:flex; gap:6px; flex-wrap:wrap; margin-top: 10px; }
-        .daybtn {
-          height: 34px;
-          min-width: 44px;
-          border-radius: 999px;
-          border: 1px solid var(--divider-color);
+          padding: 8px 10px;
           background: var(--card-background-color);
           color: var(--primary-text-color);
           cursor: pointer;
+          display:flex;
+          align-items:center;
+          gap: 8px;
         }
-        .daybtn.active { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color) inset; }
-        .daybtn.today { box-shadow: 0 0 0 1px rgba(3, 169, 244, 0.35) inset; }
+        .chip.active { border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color) inset; }
+        .avatar {
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          background: var(--primary-color);
+          color: var(--text-primary-color, #fff);
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .divider { height: 1px; background: var(--divider-color); margin: 12px 0; }
+        .icon-btn { font: inherit; border: 1px solid var(--divider-color); border-radius: 10px; padding: 6px 10px; background: var(--card-background-color); cursor:pointer; }
+        .modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.35);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding: 16px;
+          z-index: 999;
+        }
+        .modal {
+          width: min(720px, 100%);
+          max-height: min(80vh, 720px);
+          overflow: auto;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          border: 1px solid var(--divider-color);
+          border-radius: 14px;
+          box-shadow: 0 14px 40px rgba(0,0,0,0.25);
+        }
+        .modal-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 12px 12px 0 12px; }
+        .modal-title { font-weight: 700; }
+        .modal-b { padding: 12px; }
       </style>
 
-      <ha-card header="${this._escape(title)}">
+      <ha-card>
         <div class="wrap">
           ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
-          ${loading ? `<div class="muted">Loading…</div>` : ""}
+          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
 
-          <div class="grid">
-            <div class="section">
-              <div class="weekbar">
-                <div class="weeknav">
-                  <button id="week-prev" title="Previous week" ${saving ? "disabled" : ""}>&lt;</button>
-                  <div class="pill">${this._escape(weekLabel)}</div>
-                  <button id="week-next" title="Next week" ${saving ? "disabled" : ""}>&gt;</button>
-                </div>
-                <div class="pill muted">Pick day, then Generate</div>
-              </div>
-
-              <div class="daybar" role="group" aria-label="Weekday selector">
-                ${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d, idx) => {
-                  const cls = [
-                    "daybtn",
-                    (idx === selectedWeekday ? "active" : ""),
-                    (idx === todayWeekday ? "today" : "")
-                  ].filter(Boolean).join(" ");
-                  return `<button class="${cls}" data-day="${idx}" ${saving ? "disabled" : ""}>${d}</button>`;
-                }).join("")}
-              </div>
-
-              <div class="row compact" style="margin-top:12px">
-                <div>
-                  <div class="label">Person</div>
-                  <select data-focus-key="person" id="person-select" ${saving ? "disabled" : ""}>
-                    ${peopleOptions.map((p) => `<option value="${this._escape(p.id)}" ${p.id === activeId ? "selected" : ""}>${this._escape(p.name)}</option>`).join("")}
-                  </select>
-                </div>
-                <div>
-                  <div class="label">Planning mode</div>
-                  <select data-focus-key="planning_mode" id="planning-mode" ${saving ? "disabled" : ""}>
-                    <option value="auto" ${planningMode === "auto" ? "selected" : ""}>Auto</option>
-                    <option value="manual" ${planningMode === "manual" ? "selected" : ""}>Manual per session</option>
-                  </select>
-                </div>
-                <div>
-                  <div class="label">Session minutes (default override)</div>
-                  <input data-focus-key="duration" id="duration" type="number" min="20" max="120" step="5" value="${this._escape(String(this._draft.duration_minutes ?? 45))}" ${saving ? "disabled" : ""} />
-                </div>
-              </div>
-
-              <div style="margin-top:10px">
-                <div class="label">Preferred exercises/tags (CSV)</div>
-                <textarea data-focus-key="preferred" id="preferred" placeholder="e.g. squat, pullup, overhead_press" ${saving ? "disabled" : ""}>${this._escape(this._draft.preferred_exercises || "")}</textarea>
-                <div class="hint">Tip: use tags like <span class="pill">squat</span> <span class="pill">deadlift</span> <span class="pill">bench</span> <span class="pill">pullup</span> <span class="pill">row</span> <span class="pill">core</span></div>
-              </div>
-
-              <div class="actions" style="margin-top: 12px">
-                <button class="primary" id="generate" ${saving || loading ? "disabled" : ""}>Generate session</button>
-                <button id="save" ${saving || loading ? "disabled" : ""}>Save settings</button>
-                <button id="reload" ${saving ? "disabled" : ""}>Reload</button>
-              </div>
-
-              <div class="hint">
-                Rule: if you pick Squat, the generator won't suggest Deadlift (and vice versa). Bench can pair with either.
-              </div>
+          <div class="topbar">
+            <div>
+              <div class="title">${this._escape(String(title || ""))}</div>
+              <div class="sub">${this._escape(weekLabel)}${weekRange ? ` \u2022 ${this._escape(weekRange)}` : ""}${activeName ? ` \u2022 ${this._escape(activeName)}` : ""}</div>
             </div>
-
-            <div class="section">
-              <div class="row">
-                <div>
-                  <div class="label">Add person</div>
-                  <input data-focus-key="new_name" id="new-name" type="text" placeholder="Name" value="${this._escape(this._newPerson.name || "")}" ${saving ? "disabled" : ""} />
-                </div>
-                <div>
-                  <div class="label">Gender</div>
-                  <select data-focus-key="new_gender" id="new-gender" ${saving ? "disabled" : ""}>
-                    <option value="male" ${this._newPerson.gender === "male" ? "selected" : ""}>Male</option>
-                    <option value="female" ${this._newPerson.gender === "female" ? "selected" : ""}>Female</option>
-                  </select>
-                </div>
-              </div>
-              <div class="row compact" style="margin-top: 10px">
-                <div>
-                  <div class="label">Squat 1RM</div>
-                  <input data-focus-key="new_sq" id="new-sq" type="number" min="10" max="500" step="1" value="${this._escape(String(this._newPerson.max_squat ?? 100))}" ${saving ? "disabled" : ""} />
-                </div>
-                <div>
-                  <div class="label">Deadlift 1RM</div>
-                  <input data-focus-key="new_dl" id="new-dl" type="number" min="10" max="600" step="1" value="${this._escape(String(this._newPerson.max_deadlift ?? 120))}" ${saving ? "disabled" : ""} />
-                </div>
-                <div>
-                  <div class="label">Bench 1RM</div>
-                  <input data-focus-key="new_bp" id="new-bp" type="number" min="5" max="400" step="1" value="${this._escape(String(this._newPerson.max_bench ?? 80))}" ${saving ? "disabled" : ""} />
-                </div>
-                <div>
-                  <div class="label">Units</div>
-                  <select data-focus-key="new_units" id="new-units" ${saving ? "disabled" : ""}>
-                    <option value="kg" ${this._newPerson.units === "kg" ? "selected" : ""}>kg</option>
-                    <option value="lb" ${this._newPerson.units === "lb" ? "selected" : ""}>lb</option>
-                  </select>
-                </div>
-              </div>
-              <div class="actions" style="margin-top: 12px">
-                <button id="add-person" ${saving || !String(this._newPerson.name||"").trim() ? "disabled" : ""}>Add</button>
-              </div>
-              <div class="hint">People are stored in Home Assistant storage and can be used across devices.</div>
-            </div>
-
-            <div class="section" style="${manual ? "" : "opacity:0.55"}">
-              <div class="row compact">
-                <div class="muted" style="flex: 1 1 100%">
-                  Manual per-session exercise picks (only used when Planning mode = Manual)
-                </div>
-              </div>
-              <div class="row compact" style="margin-top: 10px">
-                ${sessionSlots.map((s) => `
-                  <div>
-                    <div class="label">${this._escape(s.label)}</div>
-                    <input data-focus-key="session_${this._escape(s.slot)}" data-slot="${this._escape(s.slot)}" class="session-input" type="text" placeholder="Auto" value="${this._escape(String(this._draft.session_overrides?.[s.slot] || ''))}" ${saving || !manual ? "disabled" : ""} />
-                  </div>
-                `).join("")}
-              </div>
-              <div class="hint">
-                Tip: write an exercise name here (e.g. "Back Squat"). Save settings, then Generate.
-              </div>
-            </div>
-
-            <div class="section">
-              <div class="row compact" style="justify-content: space-between">
-                <div class="muted">Latest plan (active person)</div>
-                ${plan?.week_number ? `<div class="pill">Week ${this._escape(String(plan.week_number))}</div>` : `<div class="pill">Not generated</div>`}
-              </div>
-              ${planMarkdown ? `<pre>${this._escape(planMarkdown)}</pre>` : `<div class="muted" style="margin-top:10px">Generate a plan to see it here.</div>`}
+            <div class="top-actions">
+              <button id="people" ${saving ? "disabled" : ""}>People</button>
             </div>
           </div>
+
+          <div class="layout">
+            <div class="days" role="list" aria-label="Weekdays">
+              ${daysDa.map((d, idx) => {
+                const w = workoutsByDay[idx];
+                const activeCls = idx === selectedDay ? "active" : "";
+                const badge = w ? "Workout" : "Empty";
+                const small = w ? String(w.name || "Session") : "Tap to create";
+                return `
+                  <button class="day ${activeCls}" data-day="${idx}" ${saving ? "disabled" : ""}>
+                    <div class="meta">
+                      <div class="name">${this._escape(d)}</div>
+                      <div class="hint2">${this._escape(small)}</div>
+                    </div>
+                    <span class="badge">${this._escape(badge)}</span>
+                  </button>
+                `;
+              }).join("")}
+            </div>
+
+            <div class="main">
+              <h3>${this._escape(daysDa[selectedDay] || "Day")}</h3>
+              ${selectedWorkout ? `
+                <div class="sub">${this._escape(String(selectedWorkout.name || "Session"))} \u2022 ${this._escape(String(selectedWorkout.date || ""))}</div>
+                <div class="items">
+                  ${(Array.isArray(selectedWorkout.items) ? selectedWorkout.items : []).map((it) => {
+                    if (!it || typeof it !== "object") return "";
+                    const ex = String(it.exercise || "");
+                    const sr = String(it.sets_reps || "");
+                    const load = it.suggested_load != null ? String(it.suggested_load) : "";
+                    return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="sub">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
+                  }).join("")}
+                </div>
+                <div class="actions" style="margin-top:12px">
+                  <button class="primary" id="create" ${saving || loading ? "disabled" : ""}>Replace workout</button>
+                </div>
+              ` : `
+                <div class="muted">Ingen workout endnu. Tryk for at oprette.</div>
+                <div class="actions" style="margin-top:12px">
+                  <button class="primary" id="create" ${saving || loading ? "disabled" : ""}>Create workout</button>
+                </div>
+              `}
+            </div>
+          </div>
+
+          ${peopleModal}
+          ${workoutModal}
         </div>
       </ha-card>
     `;
 
     // Wire events
-    const personSel = this.shadowRoot.querySelector("#person-select");
-    personSel?.addEventListener("change", (e) => this._setActivePerson(e.target.value));
+    this.shadowRoot.querySelector("#people")?.addEventListener("click", () => { this._ui.showPeople = true; this._render(); });
+    this.shadowRoot.querySelector("#create")?.addEventListener("click", () => { this._ui.showWorkout = true; this._render(); });
 
-    const modeSel = this.shadowRoot.querySelector("#planning-mode");
-    modeSel?.addEventListener("change", (e) => { this._draft.planning_mode = String(e.target.value || "auto"); });
-
-    const duration = this.shadowRoot.querySelector("#duration");
-    duration?.addEventListener("input", (e) => { this._draft.duration_minutes = Number(e.target.value || 45); });
-
-    const pref = this.shadowRoot.querySelector("#preferred");
-    pref?.addEventListener("input", (e) => { this._draft.preferred_exercises = String(e.target.value || ""); });
-
-    this.shadowRoot.querySelector("#save")?.addEventListener("click", () => this._saveOverrides());
-    this.shadowRoot.querySelector("#generate")?.addEventListener("click", () => this._generate());
-    this.shadowRoot.querySelector("#reload")?.addEventListener("click", () => { this._state = null; this._load(); });
-
-    // Week nav
-    this.shadowRoot.querySelector("#week-prev")?.addEventListener("click", () => { this._weekOffset = Number(this._weekOffset || 0) - 1; this._saveOverrides(); });
-    this.shadowRoot.querySelector("#week-next")?.addEventListener("click", () => { this._weekOffset = Number(this._weekOffset || 0) + 1; this._saveOverrides(); });
-
-    // Day selector
-    this.shadowRoot.querySelectorAll("button[data-day]").forEach((btn) => {
+    this.shadowRoot.querySelectorAll("button.day[data-day]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const d = Number(e.currentTarget.getAttribute("data-day"));
-        this._selectedWeekday = Number.isFinite(d) ? d : null;
-        this._saveOverrides();
+        if (!Number.isFinite(d)) return;
+        this._ui.selectedDay = d;
+        this._ui.showWorkout = true;
+        this._render();
       });
     });
 
-    // New person controls
-    this.shadowRoot.querySelector("#new-name")?.addEventListener("input", (e) => { this._newPerson.name = String(e.target.value || ""); });
-    this.shadowRoot.querySelector("#new-gender")?.addEventListener("change", (e) => { this._newPerson.gender = String(e.target.value || "male"); });
-    this.shadowRoot.querySelector("#new-sq")?.addEventListener("input", (e) => { this._newPerson.max_squat = Number(e.target.value || 0); });
-    this.shadowRoot.querySelector("#new-dl")?.addEventListener("input", (e) => { this._newPerson.max_deadlift = Number(e.target.value || 0); });
-    this.shadowRoot.querySelector("#new-bp")?.addEventListener("input", (e) => { this._newPerson.max_bench = Number(e.target.value || 0); });
-    this.shadowRoot.querySelector("#new-units")?.addEventListener("change", (e) => { this._newPerson.units = String(e.target.value || "kg"); });
-    this.shadowRoot.querySelector("#add-person")?.addEventListener("click", () => this._addPerson());
-
-    // Manual session inputs (persist into draft session_overrides)
-    this.shadowRoot.querySelectorAll(".session-input").forEach((el) => {
-      el.addEventListener("input", (e) => {
-        const slot = String(e.target.getAttribute("data-slot") || "");
-        if (!slot) return;
-        this._draft.session_overrides = { ...(this._draft.session_overrides || {}), [slot]: String(e.target.value || "") };
+    // People modal
+    this.shadowRoot.querySelector("#people-close")?.addEventListener("click", () => { this._ui.showPeople = false; this._render(); });
+    this.shadowRoot.querySelector("#people-backdrop")?.addEventListener("click", (e) => {
+      if (e.target && e.target.id === "people-backdrop") { this._ui.showPeople = false; this._render(); }
+    });
+    this.shadowRoot.querySelectorAll("button.chip[data-person]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const pid = String(e.currentTarget.getAttribute("data-person") || "");
+        if (pid) this._setActivePerson(pid);
       });
+    });
+    this.shadowRoot.querySelector("#p-name")?.addEventListener("input", (e) => { this._newPerson.name = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#p-gender")?.addEventListener("change", (e) => { this._newPerson.gender = String(e.target.value || "male"); });
+    this.shadowRoot.querySelector("#p-units")?.addEventListener("change", (e) => { this._newPerson.units = String(e.target.value || "kg"); });
+    this.shadowRoot.querySelector("#p-minutes")?.addEventListener("input", (e) => { this._newPerson.duration_minutes = Number(e.target.value || 45); });
+    this.shadowRoot.querySelector("#p-equipment")?.addEventListener("input", (e) => { this._newPerson.equipment = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#p-pref")?.addEventListener("input", (e) => { this._newPerson.preferred_exercises = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#p-sq")?.addEventListener("input", (e) => { this._newPerson.max_squat = Number(e.target.value || 0); });
+    this.shadowRoot.querySelector("#p-dl")?.addEventListener("input", (e) => { this._newPerson.max_deadlift = Number(e.target.value || 0); });
+    this.shadowRoot.querySelector("#p-bp")?.addEventListener("input", (e) => { this._newPerson.max_bench = Number(e.target.value || 0); });
+    this.shadowRoot.querySelector("#p-add")?.addEventListener("click", () => this._addPerson());
+    this.shadowRoot.querySelector("#p-delete")?.addEventListener("click", () => { if (activeId) this._deletePerson(activeId); });
+
+    // Workout modal
+    this.shadowRoot.querySelector("#workout-close")?.addEventListener("click", () => { this._ui.showWorkout = false; this._render(); });
+    this.shadowRoot.querySelector("#w-cancel")?.addEventListener("click", () => { this._ui.showWorkout = false; this._render(); });
+    this.shadowRoot.querySelector("#workout-backdrop")?.addEventListener("click", (e) => {
+      if (e.target && e.target.id === "workout-backdrop") { this._ui.showWorkout = false; this._render(); }
+    });
+    this.shadowRoot.querySelector("#w-mode")?.addEventListener("change", (e) => {
+      this._draft.planning_mode = String(e.target.value || "auto");
+      this._render();
+    });
+    this.shadowRoot.querySelector("#w-minutes")?.addEventListener("input", (e) => { this._draft.duration_minutes = Number(e.target.value || 45); });
+    this.shadowRoot.querySelector("#w-pref")?.addEventListener("input", (e) => { this._draft.preferred_exercises = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#w-generate")?.addEventListener("click", () => {
+      const d = Number(this._ui.selectedDay);
+      this._selectedWeekday = Number.isFinite(d) ? d : null;
+      if (String(this._draft.planning_mode || "auto") === "manual") {
+        const slot = d <= 1 ? "a" : (d <= 3 ? "b" : "c");
+        const lower = String(this.shadowRoot.querySelector("#w-lower")?.value || "").trim();
+        const push = String(this.shadowRoot.querySelector("#w-push")?.value || "").trim();
+        const pull = String(this.shadowRoot.querySelector("#w-pull")?.value || "").trim();
+        const next = { ...(this._draft.session_overrides || {}) };
+        next[`${slot}_lower`] = lower;
+        next[`${slot}_push`] = push;
+        next[`${slot}_pull`] = pull;
+        this._draft.session_overrides = next;
+      }
+      this._ui.showWorkout = false;
+      this._generate();
     });
 
     // Restore focus after re-render (only happens on load/save/generate)
     queueMicrotask(() => this._restoreFocus());
+  }
+
+  _cssSize(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^\\d+$/.test(raw)) return `${raw}px`;
+    if (/^\\d+(\\.\\d+)?(px|rem|em|vw|vh|%)$/.test(raw)) return raw;
+    return raw;
+  }
+
+  _formatWeekRange(weekStartIso) {
+    try {
+      const ws = new Date(String(weekStartIso) + "T00:00:00Z");
+      const we = new Date(ws.getTime() + 6 * 24 * 3600 * 1000);
+      const f = (d) => String(d.getUTCDate()).padStart(2, "0") + "." + String(d.getUTCMonth() + 1).padStart(2, "0");
+      return `${f(ws)} - ${f(we)}`;
+    } catch (_) {
+      return "";
+    }
   }
 
   _escape(value) {

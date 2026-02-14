@@ -9,11 +9,12 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
 - People profiles (male/female), per-person defaults and 1RM maxes:
   - Squat (SQ), Deadlift (DL), Bench Press (BP)
 - Weekly canvas:
-  - Pick `Week X` and a weekday, then generate that day's session
+  - `Week X` is shown at the top (week switching comes later)
+  - Pick a day from the left list and generate that day's session in a popup
   - New week starts blank (generate again)
 - Choose planning mode:
   - `Auto`: let the generator pick exercises
-  - `Manual`: pick exercises per session
+  - `Manual`: optionally choose exercises for that session
 - Rule enforcement:
   - If you pick Squat, the generator will not suggest Deadlift (and vice versa)
   - Bench can be paired with either
@@ -33,7 +34,9 @@ Add a Manual card:
 
 ```yaml
 type: custom:weekly-training-card
-title: Weekly Training
+title: Ugeplan
+# Optional: center the card and cap its width on wide dashboards
+max_width: 1100px
 ```
 
 If you have multiple entries, set `entry_id`.
@@ -42,11 +45,11 @@ Example full view YAML is in `docs/lovelace_tablet_view.yaml`.
 
 ## Screenshots
 
-Tablet (2-column layout, Week + day selector):
+Tablet (day list + workout detail panel):
 
 ![Weekly Training Tablet UI](docs/screenshots/ui-tablet.svg)
 
-Mobile (single column):
+Mobile (single column, same interactions):
 
 ![Weekly Training Mobile UI](docs/screenshots/ui-mobile.svg)
 

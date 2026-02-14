@@ -18,3 +18,12 @@ All notable changes to this project will be documented in this file.
 ## 0.1.3 - 2026-02-14
 
 - Fix: card JS syntax error (stray CSS after `customElements.define`), which could prevent the custom element from registering.
+
+## 0.1.4 - 2026-02-14
+
+- Card UI overhaul:
+  - Week header (no week switching yet)
+  - People managed from a top "People" modal
+  - Day list on the left + workout detail panel on the right
+  - Day click opens a workout popup to generate/replace the session
+- Add card config: `max_width` (e.g. `1100px`)
