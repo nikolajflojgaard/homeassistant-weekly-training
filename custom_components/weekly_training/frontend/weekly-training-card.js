@@ -1295,31 +1295,40 @@ class WeeklyTrainingCard extends HTMLElement {
 	        .layout { display:grid; grid-template-columns: 1fr; gap: 14px; margin-top: 14px; }
 	        @media (min-width: 740px) { .layout { grid-template-columns: minmax(300px, 360px) 1fr; } }
 
-		        .days { border: 1px solid var(--wt-border); border-radius: var(--wt-radius); overflow: hidden; background: var(--wt-surface); }
-	        .day {
-	          width: 100%;
-	          display:flex;
-	          align-items:flex-start;
-	          justify-content:space-between;
-	          gap: 10px;
-	          font: inherit;
-	          border: 0;
-	          border-bottom: 1px solid var(--wt-border);
-	          padding: 12px 12px;
-	          background: transparent;
-	          color: var(--primary-text-color);
-	          cursor: pointer;
-	          text-align: left;
-	          touch-action: manipulation;
-	          transition: background 120ms ease;
-	        }
-		        .day:last-child { border-bottom: 0; }
-		        .day:hover { background: var(--wt-subtle); }
-		        .day.active { background: var(--wt-subtle); }
-		        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; background: var(--wt-subtle); }
-	        .day .meta { display:flex; flex-direction:column; gap: 3px; padding-top: 2px; }
-	        .day .name { font-weight: 800; font-size: 13px; }
-	        .day .hint2 { font-size: 12px; color: var(--wt-text2); }
+			        .days {
+			          border: 1px solid var(--wt-border);
+			          border-radius: var(--wt-radius);
+			          overflow: hidden;
+			          background: var(--wt-surface);
+			          padding: 10px;
+			          display:flex;
+			          flex-direction:column;
+			          gap: 8px;
+			        }
+		        .day {
+		          width: 100%;
+		          display:flex;
+		          align-items:center;
+		          justify-content:space-between;
+		          gap: 10px;
+		          font: inherit;
+		          border: 1px solid var(--wt-border);
+		          border-radius: var(--wt-radius-sm);
+		          padding: 10px 10px;
+		          background: var(--wt-subtle2);
+		          color: var(--primary-text-color);
+		          cursor: pointer;
+		          text-align: left;
+		          touch-action: manipulation;
+		          transition: background 120ms ease, box-shadow 120ms ease, border-color 120ms ease, transform 90ms ease;
+		        }
+			        .day:hover { background: var(--wt-subtle); }
+			        .day:active { transform: scale(0.995); }
+			        .day.active { background: var(--wt-surface); border-color: var(--wt-accent); box-shadow: 0 0 0 1px var(--wt-accent) inset; }
+			        .day.today { box-shadow: 0 0 0 2px var(--primary-color) inset; }
+		        .day .meta { display:flex; flex-direction:column; gap: 2px; }
+		        .day .name { font-weight: 800; font-size: 13px; }
+		        .day .hint2 { font-size: 11px; color: var(--wt-text2); }
 
 	        .badge {
 	          font-size: 11px;
@@ -1331,7 +1340,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          background: var(--wt-subtle);
 	        }
 	        .badge.today { border-color: var(--primary-color); color: var(--primary-color); font-weight: 900; background: var(--wt-surface); }
-	        .daybadges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap: 6px; max-width: 170px; padding-top: 2px; }
+		        .daybadges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap: 6px; max-width: 170px; }
 	        .wbadge {
 	          font-size: 11px;
 	          border: 1px solid var(--wt-border);

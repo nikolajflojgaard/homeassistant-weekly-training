@@ -156,3 +156,7 @@ All notable changes to this project will be documented in this file.
 
 - Fix: saving Exercise settings (adding custom exercises) no longer triggers `expected_rev` conflicts.
 - UI: modal footer/buttons adjusted to better match native Home Assistant styling (Delete stays red).
+
+## 0.2.6 - 2026-02-14
+
+- UI: day list (left) now uses compact card boxes matching the workout item style (right), without increasing height.
