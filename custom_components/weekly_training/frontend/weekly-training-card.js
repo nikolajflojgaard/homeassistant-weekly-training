@@ -76,6 +76,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	      selectedDay: null, // 0..6
 	      workoutPersonId: "",
 	      swipeX: 0,
+	      swipeY: 0,
 	      longPress: { timer: 0, fired: false },
 	      toast: null, // { message, action, undo }
 	      showHistory: false,
@@ -1051,40 +1052,46 @@ class WeeklyTrainingCard extends HTMLElement {
       `;
 	    })() : "";
 
-		    const completedModal = this._ui && this._ui.showCompleted ? (() => {
-	      const d = this._ui.completedDetail || {};
-	      const pname = String(d.person_name || "");
-	      const pcolor = String(d.person_color || "");
-	      const wname = String(d.workout_name || "Workout");
-	      const dateIso = String(d.date || "");
-	      const items = Array.isArray(d.items) ? d.items : [];
-	      return `
-	        <div class="modal-backdrop" id="completed-backdrop" aria-hidden="false">
-	          <div class="modal" role="dialog" aria-label="Completed workout">
-	            <div class="modal-h">
-	              <div class="modal-title">${this._escape(wname)}</div>
-	              <button class="icon-btn" id="completed-close" title="Close">\u00d7</button>
-	            </div>
-	            <div class="modal-b">
-	              <div class="hint">
-	                <span class="pcircle" style="background:${this._escape(pcolor)}">${this._escape((pname || "?").slice(0, 1).toUpperCase())}</span>
-	                <span style="margin-left:8px; font-weight:800">${this._escape(pname)}</span>
-	                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
-	              </div>
-	              <div class="items" style="margin-top:12px">
-	                ${items.map((it) => {
-	                  if (!it || typeof it !== "object") return "";
-	                  const ex = String(it.exercise || "");
-	                  const sr = String(it.sets_reps || "");
-	                  const load = it.suggested_load != null ? String(it.suggested_load) : "";
-	                  return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
-	                }).join("")}
-	              </div>
-	            </div>
-	          </div>
-	        </div>
-	      `;
-		    })() : "";
+			    const completedModal = this._ui && this._ui.showCompleted ? (() => {
+		      const d = this._ui.completedDetail || {};
+		      const pname = String(d.person_name || "");
+		      const pcolor = String(d.person_color || "");
+		      const wname = String(d.workout_name || "Workout");
+		      const dateIso = String(d.date || "");
+		      const items = Array.isArray(d.items) ? d.items : [];
+		      const canDelete = Boolean(d.can_delete);
+		      return `
+		        <div class="modal-backdrop" id="completed-backdrop" aria-hidden="false">
+		          <div class="modal" role="dialog" aria-label="Completed workout">
+		            <div class="modal-h">
+		              <div class="modal-title">${this._escape(wname)}</div>
+		              <button class="icon-btn" id="completed-close" title="Close">\u00d7</button>
+		            </div>
+		            <div class="modal-b">
+		              <div class="hint">
+		                <span class="pcircle" style="background:${this._escape(pcolor)}">${this._escape((pname || "?").slice(0, 1).toUpperCase())}</span>
+		                <span style="margin-left:8px; font-weight:800">${this._escape(pname)}</span>
+		                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
+		              </div>
+		              ${canDelete ? `
+		                <div class="actions" style="margin-top:12px">
+		                  <button id="completed-delete" ${saving ? "disabled" : ""}>Delete</button>
+		                </div>
+		              ` : ``}
+		              <div class="items" style="margin-top:12px">
+		                ${items.map((it) => {
+		                  if (!it || typeof it !== "object") return "";
+		                  const ex = String(it.exercise || "");
+		                  const sr = String(it.sets_reps || "");
+		                  const load = it.suggested_load != null ? String(it.suggested_load) : "";
+		                  return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
+		                }).join("")}
+		              </div>
+		            </div>
+		          </div>
+		        </div>
+		      `;
+			    })() : "";
 
 		    const historyModal = this._ui && this._ui.showHistory ? (() => {
 		      const hist = Array.isArray(this._ui.history) ? this._ui.history : [];
@@ -1948,7 +1955,10 @@ class WeeklyTrainingCard extends HTMLElement {
 	      swipeZone.addEventListener("touchstart", (e) => {
 	        try {
 	          const t = e.touches && e.touches[0];
-	          if (t) this._ui.swipeX = Number(t.clientX) || 0;
+	          if (t) {
+	            this._ui.swipeX = Number(t.clientX) || 0;
+	            this._ui.swipeY = Number(t.clientY) || 0;
+	          }
 	        } catch (_) {}
 	      }, { passive: true });
 	      swipeZone.addEventListener("touchmove", (e) => {
@@ -1956,7 +1966,11 @@ class WeeklyTrainingCard extends HTMLElement {
 	          const t = e.touches && e.touches[0];
 	          if (!t) return;
 	          const dx = (Number(t.clientX) || 0) - Number(this._ui.swipeX || 0);
+	          const dy = (Number(t.clientY) || 0) - Number(this._ui.swipeY || 0);
 	          const adx = Math.abs(dx);
+	          const ady = Math.abs(dy);
+	          // Only treat as swipe when the gesture is clearly horizontal.
+	          if (adx < 12 || adx < (ady + 6)) { clearSwipeUI(); return; }
 	          const p = Math.max(0, Math.min(1, adx / 110));
 	          swipeZone.style.setProperty("--swipe-p", String(p));
 	          if (!bg || !bubble) return;
@@ -1974,7 +1988,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	            bubble.textContent = "";
 	          }
 	          // Prevent vertical scroll when the user is clearly swiping horizontally.
-	          if (adx > 12 && typeof e.preventDefault === "function") e.preventDefault();
+	          if (typeof e.preventDefault === "function") e.preventDefault();
 	        } catch (_) {}
 	      }, { passive: false });
 	      swipeZone.addEventListener("touchend", async (e) => {
@@ -1982,8 +1996,12 @@ class WeeklyTrainingCard extends HTMLElement {
 	          const t = e.changedTouches && e.changedTouches[0];
 	          if (!t) return;
 	          const dx = (Number(t.clientX) || 0) - Number(this._ui.swipeX || 0);
+	          const dy = (Number(t.clientY) || 0) - Number(this._ui.swipeY || 0);
+	          const adx = Math.abs(dx);
+	          const ady = Math.abs(dy);
+	          if (adx < (ady + 6)) { clearSwipeUI(); return; }
 	          const threshold = 80;
-	          if (Math.abs(dx) < threshold) { clearSwipeUI(); return; }
+	          if (adx < threshold) { clearSwipeUI(); return; }
 		          if (!pid || !wk || !dateIso) return;
 		          if (dx > 0) {
 		            const next = !Boolean(selectedWorkout.completed);
@@ -2115,13 +2133,32 @@ class WeeklyTrainingCard extends HTMLElement {
       this._applySettingsFilter(this._settingsDraft.query);
 	    }
 
-	    // Completed modal
-	    const qCompletedClose = this.shadowRoot ? this.shadowRoot.querySelector("#completed-close") : null;
-	    if (qCompletedClose) qCompletedClose.addEventListener("click", () => { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); });
-	    const qCompletedBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#completed-backdrop") : null;
-	    if (qCompletedBackdrop) qCompletedBackdrop.addEventListener("click", (e) => {
-	      if (e.target && e.target.id === "completed-backdrop") { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); }
-	    });
+		    // Completed modal
+		    const qCompletedClose = this.shadowRoot ? this.shadowRoot.querySelector("#completed-close") : null;
+		    if (qCompletedClose) qCompletedClose.addEventListener("click", () => { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); });
+		    const qCompletedBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#completed-backdrop") : null;
+		    if (qCompletedBackdrop) qCompletedBackdrop.addEventListener("click", (e) => {
+		      if (e.target && e.target.id === "completed-backdrop") { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); }
+		    });
+		    const qCompletedDelete = this.shadowRoot ? this.shadowRoot.querySelector("#completed-delete") : null;
+		    if (qCompletedDelete) qCompletedDelete.addEventListener("click", async () => {
+		      try {
+		        const d = this._ui.completedDetail || {};
+		        const pid = String(d.person_id || "");
+		        const wk = String(d.week_start || "").slice(0, 10);
+		        const dateIso = String(d.date || "");
+		        if (!pid || !wk || !dateIso) return;
+		        const ok = window.confirm("Delete this completed workout?");
+		        if (!ok) return;
+		        await this._deleteWorkout(pid, wk, dateIso);
+		        this._ui.showCompleted = false;
+		        this._ui.completedDetail = null;
+		        this._render();
+		      } catch (e) {
+		        this._error = String((e && e.message) || e);
+		        this._render();
+		      }
+		    });
 
 		    // Long-press chips in Completed bar to view details.
 		    this.shadowRoot.querySelectorAll(".cb-chip[data-cw-person][data-cw-date]").forEach((chip) => {
@@ -2141,19 +2178,21 @@ class WeeklyTrainingCard extends HTMLElement {
 	              const personPlans = plans && plans[pid] ? plans[pid] : null;
 	              const plan2 = personPlans && typeof personPlans === "object" ? personPlans[wk] : null;
 	              const workouts2 = plan2 && Array.isArray(plan2.workouts) ? plan2.workouts : [];
-	              const w = workouts2.find((x) => x && typeof x === "object" && String(x.date || "") === dateIso) || null;
-	              const p = this._personById(pid);
-	              if (!w || !p) return;
-	              this._ui.completedDetail = {
-	                person_id: pid,
-	                person_name: String(p.name || ""),
-	                person_color: this._personColor(p),
-	                workout_name: String(w.name || "Workout"),
-	                date: String(w.date || ""),
-	                items: Array.isArray(w.items) ? w.items : [],
-	              };
-	              this._ui.showCompleted = true;
-	              this._render();
+		              const w = workouts2.find((x) => x && typeof x === "object" && String(x.date || "") === dateIso) || null;
+		              const p = this._personById(pid);
+		              if (!w || !p) return;
+		              this._ui.completedDetail = {
+		                person_id: pid,
+		                week_start: wk,
+		                person_name: String(p.name || ""),
+		                person_color: this._personColor(p),
+		                workout_name: String(w.name || "Workout"),
+		                date: String(w.date || ""),
+		                items: Array.isArray(w.items) ? w.items : [],
+		                can_delete: true,
+		              };
+		              this._ui.showCompleted = true;
+		              this._render();
 	            } catch (_) {}
 	          }, 520);
 	        }
@@ -2199,11 +2238,13 @@ class WeeklyTrainingCard extends HTMLElement {
 		          const w = entry.workout || {};
 		          this._ui.completedDetail = {
 		            person_id: pid,
+		            week_start: wk,
 		            person_name: String(entry.person_name || ""),
 		            person_color: String(entry.person_color || ""),
 		            workout_name: String((w && w.name) || "Workout"),
 		            date: String((w && w.date) || dateIso),
 		            items: Array.isArray(w.items) ? w.items : [],
+		            can_delete: false,
 		          };
 		          this._ui.showCompleted = true;
 		          this._render();

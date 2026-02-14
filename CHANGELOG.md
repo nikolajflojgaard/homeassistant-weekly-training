@@ -136,3 +136,11 @@ All notable changes to this project will be documented in this file.
 ## 0.2.2 - 2026-02-14
 
 - History retention: archived workouts are kept for the newest 4 weeks only (4-week cycle), based on `week_start`.
+
+## 0.2.3 - 2026-02-14
+
+- Fix: workout generation no longer fails with `expected_rev` validation (WS schema updated).
+- Completed workout popup:
+  - Add Delete button (removes the workout from Completed).
+- Swipe hardening:
+  - Swipe actions trigger only on clear left/right gestures (vertical scrolling is not affected).

@@ -373,6 +373,7 @@ async def ws_get_plan(
         vol.Required("type"): "weekly_training/generate_plan",
         vol.Required("entry_id"): str,
         vol.Optional("person_id"): str,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -389,7 +390,11 @@ async def ws_generate_plan(
     person_id = msg.get("person_id")
     if person_id is not None:
         person_id = str(person_id)
-    state = await coordinator.async_generate_for_day(person_id=person_id)
+    try:
+        state = await coordinator.async_generate_for_day(person_id=person_id, expected_rev=msg.get("expected_rev"))
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 

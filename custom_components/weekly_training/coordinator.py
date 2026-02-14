@@ -75,6 +75,7 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         person_id: str | None = None,
         week_offset: int | None = None,
         weekday: int | None = None,
+        expected_rev: int | None = None,
     ) -> dict[str, Any]:
         """Generate and persist a session for a specific weekday in a selected week."""
         state = await self.store.async_load()
@@ -138,7 +139,12 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             existing_plan=existing_plan,
         )
 
-        updated = await self.store.async_save_plan(person_id=active_id, week_start=week_start_day.isoformat(), plan=plan)
+        updated = await self.store.async_save_plan(
+            person_id=active_id,
+            week_start=week_start_day.isoformat(),
+            plan=plan,
+            expected_rev=expected_rev,
+        )
         # Nudge entity UI to refresh options/overrides when generation happens.
         try:
             from homeassistant.helpers.dispatcher import async_dispatcher_send
