@@ -29,10 +29,11 @@ class WeeklyTrainingCard extends HTMLElement {
     this._activePerson = null;
     this._weekOffset = 0;
     this._selectedWeekday = null; // 0..6
-    this._draft = {
-      planning_mode: "auto",
-      duration_minutes: 45,
-      preferred_exercises: "",
+	    this._draft = {
+	      planning_mode: "auto",
+	      intensity: "normal", // easy | normal | hard
+	      duration_minutes: 45,
+	      preferred_exercises: "",
       // Manual picks:
       session_overrides: {
         a_lower: "",
@@ -65,18 +66,23 @@ class WeeklyTrainingCard extends HTMLElement {
     this._focusSelEnd = null;
 
     // UI state (purely client-side).
-    this._ui = {
-      showPeople: false, // person editor modal
-      editPersonId: "",
-      showSettings: false,
-      settingsQuery: "",
-      showWorkout: false,
-      workoutDay: null, // 0..6
-      selectedDay: null, // 0..6
-      workoutPersonId: "",
-      swipeX: 0,
-      longPress: { timer: 0, fired: false },
-    };
+	    this._ui = {
+	      showPeople: false, // person editor modal
+	      editPersonId: "",
+	      showSettings: false,
+	      settingsQuery: "",
+	      showWorkout: false,
+	      workoutDay: null, // 0..6
+	      selectedDay: null, // 0..6
+	      workoutPersonId: "",
+	      swipeX: 0,
+	      longPress: { timer: 0, fired: false },
+	      toast: null, // { message, action, undo }
+	      showHistory: false,
+	      history: null,
+	      historyWeek: "",
+	      conflict: "",
+	    };
 
     // Cached exercise library payload (from backend).
     this._library = null;
@@ -112,7 +118,24 @@ class WeeklyTrainingCard extends HTMLElement {
 
   async _callWS(payload) {
     if (!this._hass) throw new Error("No hass");
-    return await this._hass.callWS(payload);
+    const p = { ...(payload || {}) };
+    const t = String(p.type || "");
+    const mutating = t && t !== "weekly_training/get_state" && t !== "weekly_training/get_plan" && t !== "weekly_training/list_entries" && t !== "weekly_training/get_library" && t !== "weekly_training/get_history";
+    if (mutating && this._state && this._state.rev != null && p.expected_rev == null) {
+      p.expected_rev = Number(this._state.rev || 1);
+    }
+    try {
+      return await this._hass.callWS(p);
+    } catch (e) {
+      const code = String((e && e.code) || "");
+      const msg = String((e && e.message) || e);
+      if (code === "conflict" || msg.toLowerCase().includes("expected rev")) {
+        this._ui.conflict = "This view is out of date (changed on another device). Tap Reload.";
+        this._ui.toast = { message: "Out of date", action: "Reload", undo: { kind: "reload" } };
+        this._render();
+      }
+      throw e;
+    }
   }
 
   _applyState(nextState) {
@@ -177,12 +200,70 @@ class WeeklyTrainingCard extends HTMLElement {
     }
   }
 
+  _showToast(message, action, undo) {
+    const msg = String(message || "").trim();
+    if (!msg) return;
+    this._ui.toast = { message: msg, action: action ? String(action) : "", undo: undo || null };
+    // Auto-dismiss to keep UI clean on tablet.
+    try {
+      if (this._ui._toastTimer) window.clearTimeout(this._ui._toastTimer);
+      this._ui._toastTimer = window.setTimeout(() => {
+        this._ui.toast = null;
+        this._render();
+      }, 8000);
+    } catch (_) {}
+  }
+
+  async _reloadState() {
+    if (!this._entryId) return;
+    try {
+      const res = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId });
+      this._applyState((res && res.state) || {});
+      this._ui.conflict = "";
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._render();
+    }
+  }
+
+  async _openHistoryModal() {
+    if (!this._entryId) return;
+    try {
+      const res = await this._callWS({ type: "weekly_training/get_history", entry_id: this._entryId });
+      this._ui.history = res && Array.isArray(res.history) ? res.history : [];
+      if (!this._ui.historyWeek && this._ui.history && this._ui.history[0] && this._ui.history[0].week_start) {
+        this._ui.historyWeek = String(this._ui.history[0].week_start || "");
+      }
+      this._ui.showHistory = true;
+      this._render();
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+      this._render();
+    }
+  }
+
+  async _upsertWorkout(personId, weekStart, workout) {
+    const pid = String(personId || "");
+    const wk = String(weekStart || "");
+    if (!pid || !wk || !workout) return;
+    const res = await this._callWS({
+      type: "weekly_training/upsert_workout",
+      entry_id: this._entryId,
+      person_id: pid,
+      week_start: wk,
+      workout: workout,
+    });
+    this._applyState((res && res.state) || this._state);
+  }
+
   _applyStateToDraft() {
     const st = this._state || {};
     const overrides = st.overrides || {};
     this._weekOffset = Number(overrides.week_offset != null ? overrides.week_offset : 0);
     this._selectedWeekday = overrides.selected_weekday != null ? overrides.selected_weekday : null;
     this._draft.planning_mode = String(overrides.planning_mode || "auto");
+    this._draft.intensity = String(overrides.intensity || "normal");
     this._draft.duration_minutes = Number(overrides.duration_minutes != null ? overrides.duration_minutes : 45);
     this._draft.preferred_exercises = String(overrides.preferred_exercises || "");
     this._draft.session_overrides = { ...this._draft.session_overrides, ...(overrides.session_overrides || {}) };
@@ -257,15 +338,16 @@ class WeeklyTrainingCard extends HTMLElement {
       const payload = {
         type: "weekly_training/set_overrides",
         entry_id: this._entryId,
-        overrides: {
-          week_offset: Number(this._weekOffset || 0),
-          selected_weekday: this._selectedWeekday,
-          planning_mode: this._draft.planning_mode,
-          duration_minutes: Number(this._draft.duration_minutes || 45),
-          preferred_exercises: String(this._draft.preferred_exercises || ""),
-          session_overrides: this._draft.session_overrides || {},
-        },
-      };
+	        overrides: {
+	          week_offset: Number(this._weekOffset || 0),
+	          selected_weekday: this._selectedWeekday,
+	          planning_mode: this._draft.planning_mode,
+	          intensity: String(this._draft.intensity || "normal"),
+	          duration_minutes: Number(this._draft.duration_minutes || 45),
+	          preferred_exercises: String(this._draft.preferred_exercises || ""),
+	          session_overrides: this._draft.session_overrides || {},
+	        },
+	      };
       const res = await this._callWS(payload);
       this._applyState((res && res.state) || this._state);
     } catch (e) {
@@ -455,6 +537,17 @@ class WeeklyTrainingCard extends HTMLElement {
   }
 
   _exercisePrimaryGroup(ex) {
+    const grp0 = ex && ex.group != null ? String(ex.group || "").trim() : "";
+    if (grp0) {
+      const g = grp0.toLowerCase();
+      if (g === "lower body" || g === "lower") return "Lower body";
+      if (g === "push") return "Push";
+      if (g === "pull") return "Pull";
+      if (g === "shoulders") return "Shoulders";
+      if (g === "core") return "Core";
+      if (g === "arms") return "Arms";
+      if (g === "other") return "Other";
+    }
     const tags = (ex && Array.isArray(ex.tags) ? ex.tags : [])
       .map((t) => String(t || "").trim().toLowerCase())
       .filter(Boolean);
@@ -668,9 +761,32 @@ class WeeklyTrainingCard extends HTMLElement {
       }
     })();
 
-    const maxWidthRaw = String((this._config && this._config.max_width) || "").trim();
-    const maxWidthCss = maxWidthRaw ? this._cssSize(maxWidthRaw) : "";
-    const accent = viewPerson ? this._personColor(viewPerson) : "var(--primary-color)";
+	    const maxWidthRaw = String((this._config && this._config.max_width) || "").trim();
+	    const maxWidthCss = maxWidthRaw ? this._cssSize(maxWidthRaw) : "";
+	    const accent = viewPerson ? this._personColor(viewPerson) : "var(--primary-color)";
+
+	    // Premium first-run hint (works even if storage seeded a default "You").
+	    const seeded = people.length === 1 && String((people[0] && people[0].name) || "").trim().toLowerCase() === "you";
+	    const hasAnyPlans = (() => {
+	      const plansAll2 = this._state && this._state.plans && typeof this._state.plans === "object" ? this._state.plans : null;
+	      if (!plansAll2) return false;
+	      const pid0 = String((people[0] && people[0].id) || "");
+	      if (!pid0) return false;
+	      const personPlans = plansAll2[pid0];
+	      if (!personPlans || typeof personPlans !== "object") return false;
+	      const key2 = weekStartIso ? weekStartIso.slice(0, 10) : "";
+	      const p2 = key2 ? personPlans[key2] : null;
+	      return Boolean(p2 && Array.isArray(p2.workouts) && p2.workouts.length);
+	    })();
+	    const onboarding = seeded && !hasAnyPlans ? `
+	      <div class="onboard">
+	        <div>
+	          <div class="on-title">Set up your first profile</div>
+	          <div class="on-sub">Add people, set 1RM maxes, then tap a day to generate a session.</div>
+	        </div>
+	        <button class="primary" id="on-people" ${saving ? "disabled" : ""}>People</button>
+	      </div>
+	    ` : "";
 
 	    const isEditPerson = Boolean(String(this._ui.editPersonId || "").trim());
     const peopleModal = this._ui.showPeople ? `
@@ -779,6 +895,14 @@ class WeeklyTrainingCard extends HTMLElement {
               <div>
                 <div class="label">Session minutes</div>
                 <input data-focus-key="w_minutes" id="w-minutes" type="number" min="20" max="120" step="5" value="${this._escape(String(this._draft.duration_minutes != null ? this._draft.duration_minutes : 45))}" ${saving ? "disabled" : ""} />
+              </div>
+              <div>
+                <div class="label">Intensity</div>
+                <select data-focus-key="w_intensity" id="w-intensity" ${saving ? "disabled" : ""}>
+                  <option value="easy" ${String(this._draft.intensity || "normal") === "easy" ? "selected" : ""}>Easy</option>
+                  <option value="normal" ${String(this._draft.intensity || "normal") === "normal" ? "selected" : ""}>Normal</option>
+                  <option value="hard" ${String(this._draft.intensity || "normal") === "hard" ? "selected" : ""}>Hard</option>
+                </select>
               </div>
             </div>
 
@@ -904,21 +1028,30 @@ class WeeklyTrainingCard extends HTMLElement {
 	                  <input data-focus-key="c_eq" id="c-eq" type="text" placeholder="bodyweight, band" value="${this._escape(String(draft.new_custom && draft.new_custom.equipment || ""))}" ${saving ? "disabled" : ""}/>
 	                </div>
 	              </div>
-              <div class="actions" style="margin-top:10px">
-                <button id="c-add" ${saving ? "disabled" : ""}>Add custom exercise</button>
-              </div>
+	              <div class="actions" style="margin-top:10px">
+	                <button id="c-add" ${saving ? "disabled" : ""}>Add custom exercise</button>
+	              </div>
 
-              <div class="actions" style="margin-top:12px">
-                <button class="primary" id="s-save" ${saving ? "disabled" : ""}>Save</button>
-                <button id="s-cancel" ${saving ? "disabled" : ""}>Cancel</button>
-              </div>
+	              <div class="divider"></div>
+	              <div class="label">Import / Export</div>
+	              <div class="hint">Backup people + exercises. Plans and history are not included.</div>
+	              <div class="actions" style="margin-top:8px">
+	                <button id="cfg-export" ${saving ? "disabled" : ""}>Copy export</button>
+	                <button id="cfg-import-open" ${saving ? "disabled" : ""}>Import</button>
+	                <button id="cfg-history" ${saving ? "disabled" : ""}>History</button>
+	              </div>
+
+	              <div class="actions" style="margin-top:12px">
+	                <button class="primary" id="s-save" ${saving ? "disabled" : ""}>Save</button>
+	                <button id="s-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+	              </div>
             </div>
           </div>
         </div>
       `;
 	    })() : "";
 
-	    const completedModal = this._ui && this._ui.showCompleted ? (() => {
+		    const completedModal = this._ui && this._ui.showCompleted ? (() => {
 	      const d = this._ui.completedDetail || {};
 	      const pname = String(d.person_name || "");
 	      const pcolor = String(d.person_color || "");
@@ -951,9 +1084,68 @@ class WeeklyTrainingCard extends HTMLElement {
 	          </div>
 	        </div>
 	      `;
-	    })() : "";
+		    })() : "";
 
-	    this.shadowRoot.innerHTML = `
+		    const historyModal = this._ui && this._ui.showHistory ? (() => {
+		      const hist = Array.isArray(this._ui.history) ? this._ui.history : [];
+		      const wk = String(this._ui.historyWeek || (hist[0] && hist[0].week_start) || "");
+		      const cur = hist.find((h) => String((h && h.week_start) || "") === wk) || hist[0] || null;
+		      const completed = cur && Array.isArray(cur.completed) ? cur.completed : [];
+		      return `
+		        <div class="modal-backdrop" id="history-backdrop" aria-hidden="false">
+		          <div class="modal" role="dialog" aria-label="History">
+		            <div class="modal-h">
+		              <div class="modal-title">History</div>
+		              <button class="icon-btn" id="history-close" title="Close">\u00d7</button>
+		            </div>
+		            <div class="modal-b">
+		              <div class="label">Weeks</div>
+		              <div class="hweeks">
+		                ${hist.map((h) => {
+		                  const w0 = String((h && h.week_start) || "");
+		                  if (!w0) return "";
+		                  const isA = w0 === wk;
+		                  return `<button class="hweek ${isA ? "active" : ""}" data-hweek="${this._escape(w0)}">${this._escape(w0)}</button>`;
+		                }).join("")}
+		              </div>
+		              <div class="divider"></div>
+		              ${completed.length ? `
+		                <div class="label">Completed workouts</div>
+		                <div class="cb-chips">
+		                  ${completed.map((c) => {
+		                    if (!c || typeof c !== "object") return "";
+		                    const pid = String(c.person_id || "");
+		                    const dateIso = String(c.date || "");
+		                    const w = c.workout || {};
+		                    const wname = String((w && w.name) || "Workout");
+		                    const pname = String(c.person_name || "");
+		                    const pcolor = String(c.person_color || "");
+		                    const wweek = String(c.week_start || "");
+		                    if (!pid || !dateIso) return "";
+		                    return `
+		                      <div class="cb-chip" style="border-color:${this._escape(pcolor)}" data-hc-person="${this._escape(pid)}" data-hc-date="${this._escape(dateIso)}" data-hc-week="${this._escape(wweek)}">
+		                        <span class="pcircle" style="background:${this._escape(pcolor)}">${this._escape((pname || "?").slice(0, 1).toUpperCase())}</span>
+		                        <div class="cbtext">${this._escape(wname)} \u2022 ${this._escape(dateIso)}</div>
+		                      </div>
+		                    `;
+		                  }).join("")}
+		                </div>
+		              ` : `<div class="muted">No completed workouts archived for this week.</div>`}
+		            </div>
+		          </div>
+		        </div>
+		      `;
+		    })() : "";
+
+		    const toast = this._ui && this._ui.toast ? `
+		      <div class="snack" role="status" aria-live="polite">
+		        <div class="snack-msg">${this._escape(String(this._ui.toast.message || ""))}</div>
+		        ${this._ui.toast.action ? `<button class="snack-act" id="snack-act">${this._escape(String(this._ui.toast.action || ""))}</button>` : ""}
+		        <button class="snack-x" id="snack-x" title="Dismiss">\u00d7</button>
+		      </div>
+		    ` : "";
+
+		    this.shadowRoot.innerHTML = `
 	      <style>
 		        :host {
 		          display:block;
@@ -975,11 +1167,23 @@ class WeeklyTrainingCard extends HTMLElement {
 	          background: var(--wt-surface);
 	          ${maxWidthCss ? `max-width:${this._escape(maxWidthCss)};` : ""}
 	        }
-	        .wrap { padding: 16px; }
-	        .muted { color: var(--wt-text2); }
-	        .header { display:flex; flex-direction:column; gap: 12px; }
-	        .h-title { font-size: 22px; font-weight: 800; letter-spacing: 0.2px; }
-	        .h-row { display:flex; align-items:stretch; justify-content:space-between; gap: 12px; }
+		        .wrap { padding: 16px; }
+		        .muted { color: var(--wt-text2); }
+		        .header { display:flex; flex-direction:column; gap: 12px; }
+		        .h-title { font-size: 22px; font-weight: 800; letter-spacing: 0.2px; }
+		        .h-row { display:flex; align-items:stretch; justify-content:space-between; gap: 12px; }
+		        .onboard{
+		          display:flex;
+		          align-items:center;
+		          justify-content:space-between;
+		          gap: 12px;
+		          border: 1px solid var(--wt-border);
+		          border-radius: var(--wt-radius);
+		          padding: 12px;
+		          background: linear-gradient(180deg, rgba(var(--rgb-primary-color, 0,0,0),0.06), transparent);
+		        }
+		        .on-title{ font-weight: 900; font-size: 14px; }
+		        .on-sub{ margin-top:4px; color: var(--wt-text2); font-size: 12px; }
 	        .weekctrl { display:flex; align-items:stretch; gap: 10px; }
 	        .weekpill {
 	          border: 1px solid var(--wt-border);
@@ -1003,10 +1207,14 @@ class WeeklyTrainingCard extends HTMLElement {
 	          justify-content: center;
 	          transition: transform 90ms ease, filter 120ms ease;
 	        }
-	        .gearbtn:active { transform: scale(0.98); }
-	        .gearbtn ha-icon { color: var(--wt-text2); }
+		        .gearbtn:active { transform: scale(0.98); }
+		        .gearbtn ha-icon { color: var(--wt-text2); }
+		        .gearbtn:focus-visible, .pchip:focus-visible, .day:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+		          outline: 2px solid var(--primary-color);
+		          outline-offset: 2px;
+		        }
 
-	        .peoplebar {
+		        .peoplebar {
 	          border: 1px solid var(--wt-border);
 	          border-radius: var(--wt-radius);
 	          padding: 10px 12px;
@@ -1120,13 +1328,36 @@ class WeeklyTrainingCard extends HTMLElement {
 	        }
 	        .wbadge .wtext { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
 
-	        .main {
-	          border: 1px solid var(--wt-accent);
-	          box-shadow: 0 0 0 1px var(--wt-accent) inset;
-	          border-radius: var(--wt-radius);
-	          padding: 14px;
-	          background: var(--wt-surface);
-	        }
+		        .main {
+		          border: 1px solid var(--wt-accent);
+		          box-shadow: 0 0 0 1px var(--wt-accent) inset;
+		          border-radius: var(--wt-radius);
+		          padding: 14px;
+		          background: var(--wt-surface);
+		          position: relative;
+		        }
+		        .busy-overlay{
+		          position:absolute;
+		          inset: 0;
+		          display:flex;
+		          flex-direction:column;
+		          align-items:center;
+		          justify-content:center;
+		          gap: 10px;
+		          background: rgba(var(--rgb-card-background-color, 255,255,255), 0.72);
+		          backdrop-filter: blur(2px);
+		          border-radius: var(--wt-radius);
+		          z-index: 2;
+		        }
+		        .spinner{
+		          width: 28px;
+		          height: 28px;
+		          border-radius: 999px;
+		          border: 3px solid var(--wt-border);
+		          border-top-color: var(--primary-color);
+		          animation: spin 900ms linear infinite;
+		        }
+		        @keyframes spin{ to{ transform: rotate(360deg); } }
 	        .mainhead { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
 	        .dtitle { font-size: 16px; font-weight: 900; letter-spacing: 0.1px; }
 	        .dsub { margin-top: 3px; font-size: 12px; color: var(--wt-text2); }
@@ -1152,18 +1383,30 @@ class WeeklyTrainingCard extends HTMLElement {
 	        .cb-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
 	        .cb-title { font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wt-text2); }
 	        .cb-chips { margin-top: 8px; display:flex; gap: 8px; flex-wrap: wrap; }
-	        .cb-chip {
-	          border: 1px solid var(--wt-border);
-	          border-radius: 999px;
-	          padding: 7px 10px;
-	          background: var(--wt-surface);
-	          color: var(--primary-text-color);
-	          display:flex;
-	          align-items:center;
-	          gap: 8px;
-	          font-size: 13px;
-	          font-weight: 700;
-	        }
+		        .cb-chip {
+		          border: 1px solid var(--wt-border);
+		          border-radius: 999px;
+		          padding: 7px 10px;
+		          background: var(--wt-surface);
+		          color: var(--primary-text-color);
+		          display:flex;
+		          align-items:center;
+		          gap: 8px;
+		          font-size: 13px;
+		          font-weight: 700;
+		        }
+		        .hweeks{ display:flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+		        .hweek{
+		          font: inherit;
+		          border: 1px solid var(--wt-border);
+		          border-radius: 999px;
+		          padding: 7px 10px;
+		          background: var(--wt-surface);
+		          cursor:pointer;
+		          font-weight: 800;
+		          color: var(--primary-text-color);
+		        }
+		        .hweek.active{ border-color: var(--primary-color); box-shadow: 0 0 0 1px var(--primary-color) inset; }
         .empty-main {
           min-height: 360px;
           display:flex;
@@ -1213,9 +1456,10 @@ class WeeklyTrainingCard extends HTMLElement {
 	          background: var(--wt-surface);
 	          color: var(--primary-text-color);
 	        }
-        .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 8px; }
-        .error { color: var(--error-color); font-size: 13px; margin-top: 8px; }
-        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+	        .hint { font-size: 12px; color: var(--secondary-text-color); margin-top: 8px; }
+	        .error { color: var(--error-color); font-size: 13px; margin-top: 8px; }
+	        .conflict { color: var(--warning-color, #b45309); font-size: 13px; margin-top: 8px; }
+	        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
         .row > * { min-width: 180px; flex: 1 1 180px; }
         .row.compact > * { min-width: 140px; }
         .chiprow { display:flex; gap: 8px; flex-wrap: wrap; }
@@ -1269,7 +1513,44 @@ class WeeklyTrainingCard extends HTMLElement {
         }
         .modal-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 12px 12px 0 12px; }
         .modal-title { font-weight: 700; }
-        .modal-b { padding: 12px; }
+	        .modal-b { padding: 12px; }
+	        .snack{
+	          position: sticky;
+	          bottom: 12px;
+	          left: 0;
+	          right: 0;
+	          margin-top: 12px;
+	          display:flex;
+	          align-items:center;
+	          justify-content:space-between;
+	          gap: 10px;
+	          padding: 10px 12px;
+	          border-radius: 14px;
+	          border: 1px solid var(--wt-border);
+	          background: var(--wt-surface);
+	          box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+	          z-index: 5;
+	        }
+	        .snack-msg{ font-size: 13px; font-weight: 700; color: var(--primary-text-color); flex: 1 1 auto; }
+	        .snack-act{
+	          font: inherit;
+	          border: 1px solid var(--wt-border);
+	          border-radius: 999px;
+	          padding: 7px 10px;
+	          background: var(--wt-subtle);
+	          cursor: pointer;
+	          font-weight: 900;
+	        }
+	        .snack-x{
+	          width: 34px;
+	          height: 34px;
+	          border-radius: 999px;
+	          border: 1px solid var(--wt-border);
+	          background: var(--wt-surface);
+	          cursor:pointer;
+	          font-size: 18px;
+	          line-height: 0;
+	        }
         .xlist { border: 1px solid var(--divider-color); border-radius: 12px; overflow: auto; max-height: 360px; }
         .xrow { display:flex; gap: 10px; align-items:center; padding: 10px; border-bottom: 1px solid var(--divider-color); }
         .xrow:last-child { border-bottom: 0; }
@@ -1308,13 +1589,15 @@ class WeeklyTrainingCard extends HTMLElement {
       </style>
 
 	      <ha-card>
-        <div class="wrap">
-          ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
-          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
+	        <div class="wrap">
+	          ${this._error ? `<div class="error">${this._escape(this._error)}</div>` : ""}
+	          ${this._ui && this._ui.conflict ? `<div class="conflict">${this._escape(String(this._ui.conflict || ""))}</div>` : ""}
+	          ${loading ? `<div class="muted">Loading\u2026</div>` : ""}
 
-          <div class="header">
-            <div class="h-title">${this._escape(String(title || ""))}</div>
-	            <div class="h-row">
+	          <div class="header">
+	            <div class="h-title">${this._escape(String(title || ""))}</div>
+	            ${onboarding}
+		            <div class="h-row">
 	              <div class="weekctrl" aria-label="Week">
 	                <div class="weekpill">
 	                  <div class="wk">${this._escape(weekLabel)}</div>
@@ -1374,8 +1657,9 @@ class WeeklyTrainingCard extends HTMLElement {
 		              }).join("")}
 		            </div>
 
-		            <div class="main" id="main-panel">
-		              <div class="mainhead">
+			            <div class="main ${saving ? "busy" : ""}" id="main-panel">
+			              ${saving ? `<div class="busy-overlay"><div class="spinner"></div><div class="muted" style="font-weight:800">Working\u2026</div></div>` : ``}
+			              <div class="mainhead">
 		                <div>
 		                  <div class="dtitle">${this._escape(daysDa[selectedDay] || "Day")}</div>
 		                  <div class="dsub">
@@ -1456,19 +1740,23 @@ class WeeklyTrainingCard extends HTMLElement {
 	            `;
 		          })()}
 
-	          ${peopleModal}
-	          ${workoutModal}
-	          ${settingsModal}
-	          ${completedModal}
-	        </div>
-	      </ha-card>
-	    `;
+		          ${peopleModal}
+		          ${workoutModal}
+		          ${settingsModal}
+		          ${historyModal}
+		          ${completedModal}
+		          ${toast}
+		        </div>
+		      </ha-card>
+		    `;
 
-    // Wire events (header)
-    const qSettings = this.shadowRoot ? this.shadowRoot.querySelector("#settings") : null;
-    if (qSettings) qSettings.addEventListener("click", () => { this._openSettingsModal(); });
-    const qPersonAdd = this.shadowRoot ? this.shadowRoot.querySelector("#person-add") : null;
-    if (qPersonAdd) qPersonAdd.addEventListener("click", () => { this._openPersonModal(""); });
+	    // Wire events (header)
+	    const qSettings = this.shadowRoot ? this.shadowRoot.querySelector("#settings") : null;
+	    if (qSettings) qSettings.addEventListener("click", () => { this._openSettingsModal(); });
+	    const qOnPeople = this.shadowRoot ? this.shadowRoot.querySelector("#on-people") : null;
+	    if (qOnPeople) qOnPeople.addEventListener("click", () => { this._openPersonModal(""); });
+	    const qPersonAdd = this.shadowRoot ? this.shadowRoot.querySelector("#person-add") : null;
+	    if (qPersonAdd) qPersonAdd.addEventListener("click", () => { this._openPersonModal(""); });
     this.shadowRoot.querySelectorAll("button.pchip[data-person]").forEach((btn) => {
       btn.addEventListener("pointerdown", (e) => {
         const pid = String(e.currentTarget.getAttribute("data-person") || "");
@@ -1573,6 +1861,8 @@ class WeeklyTrainingCard extends HTMLElement {
     if (qWPerson) qWPerson.addEventListener("change", (e) => { this._ui.workoutPersonId = String(e.target.value || ""); });
     const qWMinutes = this.shadowRoot ? this.shadowRoot.querySelector("#w-minutes") : null;
     if (qWMinutes) qWMinutes.addEventListener("input", (e) => { this._draft.duration_minutes = Number(e.target.value || 45); });
+    const qWIntensity = this.shadowRoot ? this.shadowRoot.querySelector("#w-intensity") : null;
+    if (qWIntensity) qWIntensity.addEventListener("change", (e) => { this._draft.intensity = String(e.target.value || "normal"); });
     const qWPref = this.shadowRoot ? this.shadowRoot.querySelector("#w-pref") : null;
     if (qWPref) qWPref.addEventListener("input", (e) => { this._draft.preferred_exercises = String(e.target.value || ""); });
     const qWGen = this.shadowRoot ? this.shadowRoot.querySelector("#w-generate") : null;
@@ -1603,10 +1893,10 @@ class WeeklyTrainingCard extends HTMLElement {
 
     // Swipe actions on the generated workout (tablet-first).
     const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
-    if (swipeZone && selectedWorkout) {
-      const pid = String(this._activePersonId() || "");
-      const wk = String(weekStartIso || "").slice(0, 10);
-      const dateIso = String(selectedWorkout.date || "");
+	    if (swipeZone && selectedWorkout) {
+	      const pid = String(this._activePersonId() || "");
+	      const wk = String(weekStartIso || "").slice(0, 10);
+	      const dateIso = String(selectedWorkout.date || "");
       swipeZone.addEventListener("touchstart", (e) => {
         try {
           const t = e.touches && e.touches[0];
@@ -1620,17 +1910,23 @@ class WeeklyTrainingCard extends HTMLElement {
           const dx = (Number(t.clientX) || 0) - Number(this._ui.swipeX || 0);
           const threshold = 80;
           if (Math.abs(dx) < threshold) return;
-          if (!pid || !wk || !dateIso) return;
-          if (dx > 0) {
-            await this._setWorkoutCompleted(pid, wk, dateIso, !Boolean(selectedWorkout.completed));
-          } else {
-            const ok = window.confirm("Delete this workout?");
-            if (!ok) return;
-            await this._deleteWorkout(pid, wk, dateIso);
-          }
-        } catch (_) {}
-      }, { passive: true });
-    }
+	          if (!pid || !wk || !dateIso) return;
+	          if (dx > 0) {
+	            const next = !Boolean(selectedWorkout.completed);
+	            await this._setWorkoutCompleted(pid, wk, dateIso, next);
+	            if (next) {
+	              this._showToast("Marked completed", "Undo", { kind: "toggle_completed", person_id: pid, week_start: wk, date: dateIso, completed: false });
+	            }
+	          } else {
+	            const ok = window.confirm("Delete this workout?");
+	            if (!ok) return;
+	            const snapshot = JSON.parse(JSON.stringify(selectedWorkout));
+	            await this._deleteWorkout(pid, wk, dateIso);
+	            this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid, week_start: wk, workout: snapshot });
+	          }
+	        } catch (_) {}
+	      }, { passive: true });
+	    }
 
 	    // Settings modal
     const qSettingsClose = this.shadowRoot ? this.shadowRoot.querySelector("#settings-close") : null;
@@ -1641,12 +1937,48 @@ class WeeklyTrainingCard extends HTMLElement {
     if (qSettingsBackdrop) qSettingsBackdrop.addEventListener("click", (e) => {
       if (e.target && e.target.id === "settings-backdrop") { this._ui.showSettings = false; this._settingsDraft = null; this._render(); }
     });
-    const qSSave = this.shadowRoot ? this.shadowRoot.querySelector("#s-save") : null;
-    if (qSSave) qSSave.addEventListener("click", () => { this._saveExerciseConfig(); });
-    const qSQuery = this.shadowRoot ? this.shadowRoot.querySelector("#s-query") : null;
-    if (qSQuery) qSQuery.addEventListener("input", (e) => {
-      if (!this._settingsDraft) return;
-      this._settingsDraft.query = String(e.target.value || "");
+	    const qSSave = this.shadowRoot ? this.shadowRoot.querySelector("#s-save") : null;
+	    if (qSSave) qSSave.addEventListener("click", () => { this._saveExerciseConfig(); });
+	    const qCfgHistory = this.shadowRoot ? this.shadowRoot.querySelector("#cfg-history") : null;
+	    if (qCfgHistory) qCfgHistory.addEventListener("click", () => {
+	      this._ui.showSettings = false;
+	      this._settingsDraft = null;
+	      this._openHistoryModal();
+	    });
+	    const qCfgExport = this.shadowRoot ? this.shadowRoot.querySelector("#cfg-export") : null;
+	    if (qCfgExport) qCfgExport.addEventListener("click", async () => {
+	      try {
+	        const res = await this._callWS({ type: "weekly_training/export_config", entry_id: this._entryId });
+	        const txt = JSON.stringify((res && res.config) || {}, null, 2);
+	        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+	          await navigator.clipboard.writeText(txt);
+	          this._showToast("Export copied", "", null);
+	        } else {
+	          window.prompt("Copy export JSON", txt);
+	        }
+	      } catch (e) {
+	        this._error = String((e && e.message) || e);
+	        this._render();
+	      }
+	    });
+	    const qCfgImport = this.shadowRoot ? this.shadowRoot.querySelector("#cfg-import-open") : null;
+	    if (qCfgImport) qCfgImport.addEventListener("click", async () => {
+	      try {
+	        const raw = window.prompt("Paste export JSON to import");
+	        if (!raw) return;
+	        const parsed = JSON.parse(String(raw));
+	        const res = await this._callWS({ type: "weekly_training/import_config", entry_id: this._entryId, config: parsed });
+	        this._applyState((res && res.state) || this._state);
+	        this._showToast("Imported", "", null);
+	      } catch (e) {
+	        this._error = String((e && e.message) || e);
+	        this._render();
+	      }
+	    });
+	    const qSQuery = this.shadowRoot ? this.shadowRoot.querySelector("#s-query") : null;
+	    if (qSQuery) qSQuery.addEventListener("input", (e) => {
+	      if (!this._settingsDraft) return;
+	      this._settingsDraft.query = String(e.target.value || "");
       this._applySettingsFilter(this._settingsDraft.query);
     });
     this.shadowRoot.querySelectorAll("input.xtoggle[data-ex]").forEach((el) => {
@@ -1687,7 +2019,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	        return "";
 	      })();
 	      if (groupTag && tags.indexOf(groupTag) === -1) tags.unshift(groupTag);
-	      this._settingsDraft.custom = [...(this._settingsDraft.custom || []), { name, tags, equipment }];
+	      this._settingsDraft.custom = [...(this._settingsDraft.custom || []), { name, group: group || "Core", tags, equipment }];
 	      this._settingsDraft.new_custom = { name: "", group: group || "Core", tags: "", equipment: "" };
 	      this._render();
 	    });
@@ -1715,8 +2047,8 @@ class WeeklyTrainingCard extends HTMLElement {
 	      if (e.target && e.target.id === "completed-backdrop") { this._ui.showCompleted = false; this._ui.completedDetail = null; this._render(); }
 	    });
 
-	    // Long-press chips in Completed bar to view details.
-	    this.shadowRoot.querySelectorAll(".cb-chip[data-cw-person][data-cw-date]").forEach((chip) => {
+		    // Long-press chips in Completed bar to view details.
+		    this.shadowRoot.querySelectorAll(".cb-chip[data-cw-person][data-cw-date]").forEach((chip) => {
 	      chip.addEventListener("pointerdown", (e) => {
 	        const pid = String(e.currentTarget.getAttribute("data-cw-person") || "");
 	        const dateIso = String(e.currentTarget.getAttribute("data-cw-date") || "");
@@ -1760,11 +2092,80 @@ class WeeklyTrainingCard extends HTMLElement {
 	        if (lp && lp.timer) window.clearTimeout(lp.timer);
 	        if (lp) lp.timer = 0;
 	      });
-	    });
+		    });
 
-    // Restore focus after re-render (only happens on load/save/generate)
-    queueMicrotask(() => this._restoreFocus());
-  }
+		    // History modal
+		    const qHistoryClose = this.shadowRoot ? this.shadowRoot.querySelector("#history-close") : null;
+		    if (qHistoryClose) qHistoryClose.addEventListener("click", () => { this._ui.showHistory = false; this._render(); });
+		    const qHistoryBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#history-backdrop") : null;
+		    if (qHistoryBackdrop) qHistoryBackdrop.addEventListener("click", (e) => {
+		      if (e.target && e.target.id === "history-backdrop") { this._ui.showHistory = false; this._render(); }
+		    });
+		    this.shadowRoot.querySelectorAll("button.hweek[data-hweek]").forEach((btn) => {
+		      btn.addEventListener("click", (e) => {
+		        const wk = String(e.currentTarget.getAttribute("data-hweek") || "");
+		        if (!wk) return;
+		        this._ui.historyWeek = wk;
+		        this._render();
+		      });
+		    });
+		    this.shadowRoot.querySelectorAll(".cb-chip[data-hc-person][data-hc-date][data-hc-week]").forEach((chip) => {
+		      chip.addEventListener("click", (e) => {
+		        try {
+		          const pid = String(e.currentTarget.getAttribute("data-hc-person") || "");
+		          const dateIso = String(e.currentTarget.getAttribute("data-hc-date") || "");
+		          const wk = String(e.currentTarget.getAttribute("data-hc-week") || "");
+		          const hist = Array.isArray(this._ui.history) ? this._ui.history : [];
+		          const week = hist.find((h) => String((h && h.week_start) || "") === wk) || null;
+		          const arr = week && Array.isArray(week.completed) ? week.completed : [];
+		          const entry = arr.find((c) => c && typeof c === "object" && String(c.person_id || "") === pid && String(c.date || "") === dateIso) || null;
+		          if (!entry) return;
+		          const w = entry.workout || {};
+		          this._ui.completedDetail = {
+		            person_id: pid,
+		            person_name: String(entry.person_name || ""),
+		            person_color: String(entry.person_color || ""),
+		            workout_name: String((w && w.name) || "Workout"),
+		            date: String((w && w.date) || dateIso),
+		            items: Array.isArray(w.items) ? w.items : [],
+		          };
+		          this._ui.showCompleted = true;
+		          this._render();
+		        } catch (_) {}
+		      });
+		    });
+
+		    // Snackbar / Undo
+		    const qSnackX = this.shadowRoot ? this.shadowRoot.querySelector("#snack-x") : null;
+		    if (qSnackX) qSnackX.addEventListener("click", () => { this._ui.toast = null; this._render(); });
+		    const qSnackAct = this.shadowRoot ? this.shadowRoot.querySelector("#snack-act") : null;
+		    if (qSnackAct) qSnackAct.addEventListener("click", async () => {
+		      const u = this._ui.toast && this._ui.toast.undo ? this._ui.toast.undo : null;
+		      this._ui.toast = null;
+		      this._render();
+		      if (!u || typeof u !== "object") return;
+		      try {
+		        if (u.kind === "reload") {
+		          await this._reloadState();
+		          return;
+		        }
+		        if (u.kind === "toggle_completed") {
+		          await this._setWorkoutCompleted(String(u.person_id || ""), String(u.week_start || ""), String(u.date || ""), Boolean(u.completed));
+		          return;
+		        }
+		        if (u.kind === "restore_workout") {
+		          await this._upsertWorkout(String(u.person_id || ""), String(u.week_start || ""), u.workout || {});
+		          await this._reloadState();
+		        }
+		      } catch (e) {
+		        this._error = String((e && e.message) || e);
+		        this._render();
+		      }
+		    });
+
+	    // Restore focus after re-render (only happens on load/save/generate)
+	    queueMicrotask(() => this._restoreFocus());
+	  }
 
   _cssSize(value) {
     const raw = String(value || "").trim();

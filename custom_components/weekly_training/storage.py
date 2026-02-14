@@ -6,6 +6,8 @@ State model (schema v1):
 - overrides: per-entry generation overrides (week offset/day + duration/preferred + planning mode + session picks)
 - exercise_config: exercise list overrides (disable built-ins, add custom exercises)
 - plans: mapping person_id -> mapping week_start -> plan payload
+- rev: monotonic revision for optimistic concurrency in the UI
+- history: archived previous weeks (read-only in UI, kept small)
 """
 
 from __future__ import annotations
@@ -53,6 +55,51 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+class ConflictError(RuntimeError):
+    """Raised when optimistic concurrency checks fail."""
+
+    def __init__(self, *, expected: int, current: int) -> None:
+        super().__init__(f"State changed (expected rev={expected}, current rev={current})")
+        self.expected = expected
+        self.current = current
+
+
+def _normalize_custom_exercise(ex: dict[str, Any]) -> dict[str, Any] | None:
+    name = str(ex.get("name") or "").strip()
+    if not name:
+        return None
+    tags = ex.get("tags") or []
+    equipment = ex.get("equipment") or []
+    if not isinstance(tags, list):
+        tags = []
+    if not isinstance(equipment, list):
+        equipment = []
+    group = str(ex.get("group") or "").strip() or None
+    ex_id = str(ex.get("id") or "").strip()
+    now = _now_iso()
+    if not ex_id:
+        ex_id = f"ex_custom_{uuid4().hex[:10]}"
+    created_at = str(ex.get("created_at") or "").strip() or now
+    updated_at = str(ex.get("updated_at") or "").strip() or now
+    return {
+        "id": ex_id,
+        "name": name,
+        "group": group,
+        "tags": [str(t).strip().lower() for t in tags if str(t).strip()],
+        "equipment": [str(t).strip().lower() for t in equipment if str(t).strip()],
+        "custom": True,
+        "created_at": created_at,
+        "updated_at": updated_at,
+    }
+
+
+def _trim_history(items: list[dict[str, Any]], *, keep: int = 4) -> list[dict[str, Any]]:
+    # Sort newest first by archived_at.
+    items = [x for x in items if isinstance(x, dict)]
+    items.sort(key=lambda x: str(x.get("archived_at") or ""), reverse=True)
+    return items[: max(0, int(keep))]
+
+
 def _new_person(
     *,
     name: str,
@@ -98,6 +145,7 @@ class WeeklyTrainingStore:
             self._data = loaded if isinstance(loaded, dict) else {}
 
             self._data.setdefault("schema", 1)
+            self._data.setdefault("rev", 1)
             self._data.setdefault("people", [])
             self._data.setdefault("active_person_id", "")
             self._data.setdefault(
@@ -127,11 +175,27 @@ class WeeklyTrainingStore:
                 {
                     # If non-empty: these exercise names are excluded from auto-picks and manual picks.
                     "disabled_exercises": [],
-                    # List of custom exercise dicts {name,tags,equipment} to be merged into the library.
+                    # List of custom exercise dicts {id,name,group,tags,equipment,...} to be merged into the library.
                     "custom_exercises": [],
                 },
             )
+            self._data.setdefault("history", [])
             self._data.setdefault("updated_at", _now_iso())
+
+            # Normalize custom exercises from older schema.
+            cfg = self._data.get("exercise_config")
+            if isinstance(cfg, dict):
+                custom = cfg.get("custom_exercises")
+                if isinstance(custom, list):
+                    norm: list[dict[str, Any]] = []
+                    for ex in custom:
+                        if not isinstance(ex, dict):
+                            continue
+                        n = _normalize_custom_exercise(ex)
+                        if n:
+                            norm.append(n)
+                    cfg["custom_exercises"] = norm
+                    self._data["exercise_config"] = cfg
 
             # Seed one default person for first-run UX.
             if not self._data["people"]:
@@ -147,13 +211,22 @@ class WeeklyTrainingStore:
 
         return dict(self._data)
 
+    def _assert_rev(self, state: dict[str, Any], expected_rev: int | None) -> None:
+        if expected_rev is None:
+            return
+        cur = int(state.get("rev") or 1)
+        if int(expected_rev) != cur:
+            raise ConflictError(expected=int(expected_rev), current=cur)
+
     async def async_set_exercise_config(
         self,
         *,
         disabled_exercises: list[str] | None = None,
         custom_exercises: list[dict[str, Any]] | None = None,
+        expected_rev: int | None = None,
     ) -> dict[str, Any]:
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         cfg = state.get("exercise_config") if isinstance(state, dict) else None
         if not isinstance(cfg, dict):
             cfg = {"disabled_exercises": [], "custom_exercises": []}
@@ -179,22 +252,9 @@ class WeeklyTrainingStore:
             for ex in custom_exercises:
                 if not isinstance(ex, dict):
                     continue
-                name = str(ex.get("name") or "").strip()
-                if not name:
-                    continue
-                tags = ex.get("tags") or []
-                equipment = ex.get("equipment") or []
-                if not isinstance(tags, list):
-                    tags = []
-                if not isinstance(equipment, list):
-                    equipment = []
-                normalized.append(
-                    {
-                        "name": name,
-                        "tags": [str(t).strip().lower() for t in tags if str(t).strip()],
-                        "equipment": [str(t).strip().lower() for t in equipment if str(t).strip()],
-                    }
-                )
+                n = _normalize_custom_exercise(ex)
+                if n:
+                    normalized.append(n)
             cfg["custom_exercises"] = normalized
 
         state["exercise_config"] = cfg
@@ -203,13 +263,15 @@ class WeeklyTrainingStore:
     async def async_save(self, state: dict[str, Any]) -> dict[str, Any]:
         next_state = dict(state or {})
         next_state["schema"] = 1
+        next_state["rev"] = int(next_state.get("rev") or 1) + 1
         next_state["updated_at"] = _now_iso()
         self._data = next_state
         await self._store.async_save(self._data)
         return dict(self._data)
 
-    async def async_set_active_person(self, person_id: str) -> dict[str, Any]:
+    async def async_set_active_person(self, person_id: str, *, expected_rev: int | None = None) -> dict[str, Any]:
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         people = state.get("people") if isinstance(state, dict) else []
         ids = {str(p.get("id") or "") for p in (people or []) if isinstance(p, dict)}
         if person_id not in ids:
@@ -247,8 +309,11 @@ class WeeklyTrainingStore:
         preferred_exercises: str | None = None,
         planning_mode: str | None = None,
         session_overrides: dict[str, str] | None = None,
+        intensity: str | None = None,
+        expected_rev: int | None = None,
     ) -> dict[str, Any]:
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         overrides = state.get("overrides") if isinstance(state, dict) else None
         if not isinstance(overrides, dict):
             overrides = {
@@ -269,6 +334,8 @@ class WeeklyTrainingStore:
             overrides["preferred_exercises"] = str(preferred_exercises or "")
         if planning_mode is not None:
             overrides["planning_mode"] = str(planning_mode or "auto").lower()
+        if intensity is not None:
+            overrides["intensity"] = str(intensity or "normal").lower()
         if session_overrides is not None:
             current = overrides.get("session_overrides")
             if not isinstance(current, dict):
@@ -280,8 +347,9 @@ class WeeklyTrainingStore:
         state["overrides"] = overrides
         return await self.async_save(state)
 
-    async def async_upsert_person(self, person: dict[str, Any]) -> dict[str, Any]:
+    async def async_upsert_person(self, person: dict[str, Any], *, expected_rev: int | None = None) -> dict[str, Any]:
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         people = state.get("people")
         if not isinstance(people, list):
             people = []
@@ -333,8 +401,9 @@ class WeeklyTrainingStore:
             state["active_person_id"] = incoming_id
         return await self.async_save(state)
 
-    async def async_delete_person(self, person_id: str) -> dict[str, Any]:
+    async def async_delete_person(self, person_id: str, *, expected_rev: int | None = None) -> dict[str, Any]:
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         people = state.get("people")
         if not isinstance(people, list):
             return state
@@ -348,8 +417,11 @@ class WeeklyTrainingStore:
             state["active_person_id"] = str(people[0].get("id")) if people else ""
         return await self.async_save(state)
 
-    async def async_save_plan(self, *, person_id: str, week_start: str, plan: dict[str, Any]) -> dict[str, Any]:
+    async def async_save_plan(
+        self, *, person_id: str, week_start: str, plan: dict[str, Any], expected_rev: int | None = None
+    ) -> dict[str, Any]:
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         plans = state.get("plans")
         if not isinstance(plans, dict):
             plans = {}
@@ -361,9 +433,10 @@ class WeeklyTrainingStore:
         state["plans"] = plans
         return await self.async_save(state)
 
-    async def async_delete_week(self, *, week_start: str) -> dict[str, Any]:
+    async def async_delete_week(self, *, week_start: str, expected_rev: int | None = None) -> dict[str, Any]:
         """Delete a week plan for all people (blank canvas on new week)."""
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         plans = state.get("plans")
         if not isinstance(plans, dict):
             return state
@@ -380,11 +453,63 @@ class WeeklyTrainingStore:
             return await self.async_save(state)
         return state
 
+    async def async_archive_week(self, *, week_start: str, keep_weeks: int = 4) -> dict[str, Any]:
+        """Archive completed workouts for a week into history (read-only)."""
+        state = await self.async_load()
+        plans = state.get("plans")
+        if not isinstance(plans, dict):
+            return state
+
+        people = state.get("people") if isinstance(state.get("people"), list) else []
+        people_by_id = {str(p.get("id") or ""): p for p in people if isinstance(p, dict)}
+        completed: list[dict[str, Any]] = []
+
+        for pid, person_plans in plans.items():
+            if not isinstance(person_plans, dict):
+                continue
+            plan = person_plans.get(str(week_start))
+            if not isinstance(plan, dict):
+                continue
+            workouts = plan.get("workouts")
+            if not isinstance(workouts, list):
+                continue
+            person = people_by_id.get(str(pid)) or {}
+            for w in workouts:
+                if not isinstance(w, dict):
+                    continue
+                if not bool(w.get("completed")):
+                    continue
+                completed.append(
+                    {
+                        "person_id": str(pid),
+                        "person_name": str(person.get("name") or ""),
+                        "person_color": str(person.get("color") or ""),
+                        "week_start": str(week_start),
+                        "date": str(w.get("date") or ""),
+                        "workout": w,
+                    }
+                )
+
+        if not completed:
+            return state
+
+        history = state.get("history")
+        if not isinstance(history, list):
+            history = []
+        history.append({"week_start": str(week_start), "archived_at": _now_iso(), "completed": completed})
+        state["history"] = _trim_history(history, keep=int(keep_weeks))
+        return await self.async_save(state)
+
+    def get_history(self, state: dict[str, Any]) -> list[dict[str, Any]]:
+        history = state.get("history") if isinstance(state, dict) else None
+        return history if isinstance(history, list) else []
+
     async def async_set_workout_completed(
-        self, *, person_id: str, week_start: str, date_iso: str, completed: bool
+        self, *, person_id: str, week_start: str, date_iso: str, completed: bool, expected_rev: int | None = None
     ) -> dict[str, Any]:
         """Toggle completed flag on a workout by date."""
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         plan = self.get_plan(state, person_id=str(person_id), week_start=str(week_start))
         if not isinstance(plan, dict):
             return state
@@ -410,10 +535,11 @@ class WeeklyTrainingStore:
         return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
 
     async def async_delete_workout(
-        self, *, person_id: str, week_start: str, date_iso: str
+        self, *, person_id: str, week_start: str, date_iso: str, expected_rev: int | None = None
     ) -> dict[str, Any]:
         """Delete a workout by date."""
         state = await self.async_load()
+        self._assert_rev(state, expected_rev)
         plan = self.get_plan(state, person_id=str(person_id), week_start=str(week_start))
         if not isinstance(plan, dict):
             return state
@@ -427,6 +553,31 @@ class WeeklyTrainingStore:
         if len(next_workouts) == len(workouts):
             return state
         plan["workouts"] = next_workouts
+        return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
+
+    async def async_upsert_workout(
+        self,
+        *,
+        person_id: str,
+        week_start: str,
+        workout: dict[str, Any],
+        expected_rev: int | None = None,
+    ) -> dict[str, Any]:
+        """Insert or replace a workout (used for undo restore/import)."""
+        state = await self.async_load()
+        self._assert_rev(state, expected_rev)
+        plan = self.get_plan(state, person_id=str(person_id), week_start=str(week_start)) or {}
+        if not isinstance(plan, dict):
+            plan = {}
+        workouts = plan.get("workouts")
+        if not isinstance(workouts, list):
+            workouts = []
+        date_iso = str((workout or {}).get("date") or "").strip()
+        if not date_iso:
+            return state
+        workouts = [w for w in workouts if not (isinstance(w, dict) and str(w.get("date") or "") == date_iso)]
+        workouts.append(dict(workout or {}))
+        plan["workouts"] = workouts
         return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
 
     def get_plan(self, state: dict[str, Any], *, person_id: str, week_start: str) -> dict[str, Any] | None:

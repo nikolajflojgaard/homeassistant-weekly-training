@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .ws_state import public_state
+from .storage import ConflictError
 
 
 def _runtime_payload() -> dict[str, Any]:
@@ -62,19 +63,23 @@ async def ws_get_library(
     if isinstance(custom, list):
         exercises = [*exercises, *[e for e in custom if isinstance(e, dict)]]
 
-    # Keep payload minimal: name + tags + equipment
+    # Payload: enough for UI grouping + future-proofing.
     payload = []
     for ex in exercises:
         if not isinstance(ex, dict):
             continue
+        ex_id = str(ex.get("id") or "").strip()
         name = str(ex.get("name") or "").strip()
         if not name:
             continue
+        group = ex.get("group")
         tags = ex.get("tags") if isinstance(ex.get("tags"), list) else []
         equipment = ex.get("equipment") if isinstance(ex.get("equipment"), list) else []
         payload.append(
             {
+                **({"id": ex_id} if ex_id else {}),
                 "name": name,
+                **({"group": str(group)} if group else {}),
                 "tags": [str(t).strip().lower() for t in tags if str(t).strip()],
                 "equipment": [str(t).strip().lower() for t in equipment if str(t).strip()],
             }
@@ -134,6 +139,7 @@ async def ws_get_state(
         vol.Required("week_start"): str,
         vol.Required("date"): str,
         vol.Required("completed"): bool,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -147,12 +153,17 @@ async def ws_set_workout_completed(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = await coordinator.store.async_set_workout_completed(
-        person_id=str(msg["person_id"]),
-        week_start=str(msg["week_start"]),
-        date_iso=str(msg["date"]),
-        completed=bool(msg["completed"]),
-    )
+    try:
+        state = await coordinator.store.async_set_workout_completed(
+            person_id=str(msg["person_id"]),
+            week_start=str(msg["week_start"]),
+            date_iso=str(msg["date"]),
+            completed=bool(msg["completed"]),
+            expected_rev=msg.get("expected_rev"),
+        )
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -164,6 +175,7 @@ async def ws_set_workout_completed(
         vol.Required("person_id"): str,
         vol.Required("week_start"): str,
         vol.Required("date"): str,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -177,11 +189,16 @@ async def ws_delete_workout(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = await coordinator.store.async_delete_workout(
-        person_id=str(msg["person_id"]),
-        week_start=str(msg["week_start"]),
-        date_iso=str(msg["date"]),
-    )
+    try:
+        state = await coordinator.store.async_delete_workout(
+            person_id=str(msg["person_id"]),
+            week_start=str(msg["week_start"]),
+            date_iso=str(msg["date"]),
+            expected_rev=msg.get("expected_rev"),
+        )
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -191,6 +208,7 @@ async def ws_delete_workout(
         vol.Required("type"): "weekly_training/set_active_person",
         vol.Required("entry_id"): str,
         vol.Required("person_id"): str,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -204,7 +222,11 @@ async def ws_set_active_person(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = await coordinator.store.async_set_active_person(str(msg["person_id"]))
+    try:
+        state = await coordinator.store.async_set_active_person(str(msg["person_id"]), expected_rev=msg.get("expected_rev"))
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -214,6 +236,7 @@ async def ws_set_active_person(
         vol.Required("type"): "weekly_training/set_overrides",
         vol.Required("entry_id"): str,
         vol.Required("overrides"): dict,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -230,21 +253,32 @@ async def ws_set_overrides(
     raw = msg.get("overrides") or {}
     if not isinstance(raw, dict):
         raw = {}
-    state = await coordinator.store.async_set_overrides(
-        week_offset=raw.get("week_offset"),
-        selected_weekday=raw.get("selected_weekday"),
-        duration_minutes=raw.get("duration_minutes"),
-        preferred_exercises=raw.get("preferred_exercises"),
-        planning_mode=raw.get("planning_mode"),
-        session_overrides=raw.get("session_overrides") if isinstance(raw.get("session_overrides"), dict) else None,
-    )
+    try:
+        state = await coordinator.store.async_set_overrides(
+            week_offset=raw.get("week_offset"),
+            selected_weekday=raw.get("selected_weekday"),
+            duration_minutes=raw.get("duration_minutes"),
+            preferred_exercises=raw.get("preferred_exercises"),
+            planning_mode=raw.get("planning_mode"),
+            intensity=raw.get("intensity"),
+            session_overrides=raw.get("session_overrides") if isinstance(raw.get("session_overrides"), dict) else None,
+            expected_rev=msg.get("expected_rev"),
+        )
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     # Optional: exercise config updates piggybacked here (UI convenience).
     if "exercise_config" in raw and isinstance(raw.get("exercise_config"), dict):
         cfg = raw.get("exercise_config") or {}
-        state = await coordinator.store.async_set_exercise_config(
-            disabled_exercises=cfg.get("disabled_exercises") if isinstance(cfg.get("disabled_exercises"), list) else None,
-            custom_exercises=cfg.get("custom_exercises") if isinstance(cfg.get("custom_exercises"), list) else None,
-        )
+        try:
+            state = await coordinator.store.async_set_exercise_config(
+                disabled_exercises=cfg.get("disabled_exercises") if isinstance(cfg.get("disabled_exercises"), list) else None,
+                custom_exercises=cfg.get("custom_exercises") if isinstance(cfg.get("custom_exercises"), list) else None,
+                expected_rev=msg.get("expected_rev"),
+            )
+        except ConflictError as e:
+            connection.send_error(msg["id"], "conflict", str(e))
+            return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -254,6 +288,7 @@ async def ws_set_overrides(
         vol.Required("type"): "weekly_training/add_person",
         vol.Required("entry_id"): str,
         vol.Required("person"): dict,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -270,7 +305,11 @@ async def ws_add_person(
     person = msg.get("person") or {}
     if not isinstance(person, dict):
         person = {}
-    state = await coordinator.store.async_upsert_person(person)
+    try:
+        state = await coordinator.store.async_upsert_person(person, expected_rev=msg.get("expected_rev"))
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -280,6 +319,7 @@ async def ws_add_person(
         vol.Required("type"): "weekly_training/delete_person",
         vol.Required("entry_id"): str,
         vol.Required("person_id"): str,
+        vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -293,7 +333,11 @@ async def ws_delete_person(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = await coordinator.store.async_delete_person(str(msg["person_id"]))
+    try:
+        state = await coordinator.store.async_delete_person(str(msg["person_id"]), expected_rev=msg.get("expected_rev"))
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -349,6 +393,137 @@ async def ws_generate_plan(
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/upsert_workout",
+        vol.Required("entry_id"): str,
+        vol.Required("person_id"): str,
+        vol.Required("week_start"): str,
+        vol.Required("workout"): dict,
+        vol.Optional("expected_rev"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_upsert_workout(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    workout = msg.get("workout") or {}
+    if not isinstance(workout, dict):
+        workout = {}
+    try:
+        state = await coordinator.store.async_upsert_workout(
+            person_id=str(msg["person_id"]),
+            week_start=str(msg["week_start"]),
+            workout=workout,
+            expected_rev=msg.get("expected_rev"),
+        )
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
+    await coordinator.async_request_refresh()
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/get_history",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_get_history(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    state = await coordinator.store.async_load()
+    history = coordinator.store.get_history(state)
+    connection.send_result(msg["id"], {"entry_id": entry_id, "history": history})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/export_config",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_export_config(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    state = await coordinator.store.async_load()
+    config = {
+        "people": state.get("people", []),
+        "exercise_config": state.get("exercise_config", {}),
+    }
+    connection.send_result(msg["id"], {"entry_id": entry_id, "config": config})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "weekly_training/import_config",
+        vol.Required("entry_id"): str,
+        vol.Required("config"): dict,
+        vol.Optional("expected_rev"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_import_config(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    state = await coordinator.store.async_load()
+    try:
+        coordinator.store._assert_rev(state, msg.get("expected_rev"))  # noqa: SLF001
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
+    cfg = msg.get("config") or {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    people = cfg.get("people")
+    ex_cfg = cfg.get("exercise_config")
+    if isinstance(people, list):
+        state["people"] = [p for p in people if isinstance(p, dict)]
+    if isinstance(ex_cfg, dict):
+        state["exercise_config"] = ex_cfg
+    # Safety: imported profiles rarely match existing plans. Start fresh.
+    state["plans"] = {}
+    state["history"] = []
+    # Ensure active_person_id is valid.
+    ids = {str(p.get("id") or "") for p in (state.get("people") or []) if isinstance(p, dict)}
+    if state.get("active_person_id") not in ids:
+        state["active_person_id"] = next(iter(ids), "")
+    state = await coordinator.store.async_save(state)
+    await coordinator.async_request_refresh()
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
+
+
 def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_list_entries)
     websocket_api.async_register_command(hass, ws_get_state)
@@ -361,3 +536,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_library)
     websocket_api.async_register_command(hass, ws_set_workout_completed)
     websocket_api.async_register_command(hass, ws_delete_workout)
+    websocket_api.async_register_command(hass, ws_upsert_workout)
+    websocket_api.async_register_command(hass, ws_get_history)
+    websocket_api.async_register_command(hass, ws_export_config)
+    websocket_api.async_register_command(hass, ws_import_config)

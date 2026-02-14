@@ -140,6 +140,7 @@ def generate_session(
 
     overrides = overrides or {}
     planning_mode = str(overrides.get("planning_mode") or "auto").lower()
+    intensity = str(overrides.get("intensity") or "normal").lower()
     session_overrides = overrides.get("session_overrides") if isinstance(overrides.get("session_overrides"), dict) else {}
     if not isinstance(session_overrides, dict):
         session_overrides = {}
@@ -166,8 +167,15 @@ def generate_session(
     ctx = PickContext(equipment=equipment, preferred=preferred, disabled=disabled)
 
     # Rep ranges: keep simple, slight variation by gender purely as defaults.
-    main_reps = "3 x 5" if gender == "male" else "3 x 6"
-    accessory_reps = "3 x 10"
+    if intensity == "easy":
+        main_reps = "3 x 5" if gender == "male" else "3 x 6"
+        accessory_reps = "2 x 12"
+    elif intensity == "hard":
+        main_reps = "4 x 5" if gender == "male" else "4 x 6"
+        accessory_reps = "3 x 10"
+    else:
+        main_reps = "3 x 5" if gender == "male" else "3 x 6"
+        accessory_reps = "3 x 10"
     core_reps = "3 x 12"
 
     # Index exercises by name to allow manual selection by name.
@@ -275,24 +283,30 @@ def generate_session(
 
     def _suggested_load(exercise_name: str, sets_reps: str, kind: str) -> float | None:
         name = str(exercise_name or "").lower()
+        if intensity == "easy":
+            main_pct = 0.65
+        elif intensity == "hard":
+            main_pct = 0.80
+        else:
+            main_pct = 0.75
         # Simple heuristics. In real life you'd track more lifts.
         if "squat" in name:
             base = max_sq
             if "front squat" in name:
                 base = max_sq * 0.85
-            return _round_load(base * 0.75) if base else None
+            return _round_load(base * main_pct) if base else None
         if "deadlift" in name:
             base = max_dl
             if "romanian" in name:
                 base = max_dl * 0.65
-            return _round_load(base * 0.75) if base else None
+            return _round_load(base * main_pct) if base else None
         if "bench" in name:
             base = max_bp
-            return _round_load(base * 0.75) if base else None
+            return _round_load(base * main_pct) if base else None
         if "overhead press" in name or "press" == name:
             # If no OHP 1RM exists, approximate from bench.
             base = max_bp * 0.65 if max_bp else 0
-            return _round_load(base * 0.75) if base else None
+            return _round_load(base * main_pct) if base else None
         return None
 
     def _item(kind: str, exercise: str, sets_reps: str) -> dict[str, Any]:
@@ -317,6 +331,7 @@ def generate_session(
         "name": f"Full Body {slot}",
         "date": session_date_iso,
         "weekday": int(weekday),
+        "intensity": intensity,
         "items": items,
     }
 

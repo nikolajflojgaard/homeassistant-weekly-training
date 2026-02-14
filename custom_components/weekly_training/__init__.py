@@ -33,6 +33,8 @@ def _schedule_week_cleanup(*, hass: HomeAssistant, entry: ConfigEntry, coordinat
             today = local_now.date()
             monday = today - timedelta(days=today.weekday())
             prev_week_start = (monday - timedelta(days=7)).isoformat()
+            # Archive completed workouts before blanking the canvas.
+            await coordinator.store.async_archive_week(week_start=prev_week_start)
             await coordinator.store.async_delete_week(week_start=prev_week_start)
             await coordinator.async_request_refresh()
         except Exception:  # noqa: BLE001

@@ -22,7 +22,9 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
   - `Manual`: optionally choose exercises for that session
 - Exercise settings (gear icon):
   - Disable built-in exercises you don't want suggested (grid grouped by muscle group)
-  - Add custom exercises (name + tags + equipment)
+  - Add custom exercises (name + category + tags + equipment)
+- Backup:
+  - Import/Export people + exercise settings (Settings)
 - Rule enforcement:
   - If you pick Squat, the generator will not suggest Deadlift (and vice versa)
   - Bench can be paired with either
@@ -30,7 +32,12 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
 - Workout actions:
   - Swipe right: mark Completed
   - Swipe left: delete workout
+  - Undo is available via the snackbar after swipe actions
   - Bottom bar shows completed workouts for the current week across all people
+- Intensity:
+  - Pick `Easy/Normal/Hard` per session (affects suggested load % and volume)
+- History:
+  - Completed workouts are archived automatically at week rollover and kept for the last 4 weeks (Settings -> History)
 
 ## Install (HACS)
 

@@ -111,3 +111,18 @@ All notable changes to this project will be documented in this file.
 - Settings: when adding a custom exercise you can pick a Category (Lower body/Push/Pull/Shoulders/Core/Arms/Other).
   - New custom exercises are automatically tagged so they appear in the right category section grid.
 - UI: updated subtle surfaces to avoid large gray blocks while keeping HA theme-native styling.
+
+## 0.2.0 - 2026-02-14
+
+- Undo:
+  - Swipe right (Completed) and swipe left (Delete) now show an Undo snackbar.
+- Hardening:
+  - Optimistic concurrency via `rev` + conflict detection (reload prompt when changed on another device).
+  - Loading overlay while saving/generating.
+- Training:
+  - Add session `Intensity` (Easy/Normal/Hard) affecting main lift load % and volume.
+- History:
+  - Completed workouts are archived on week rollover (Monday 01:00 local time) and kept for the last 4 weeks.
+  - History viewer in Settings.
+- Backup:
+  - Import/Export people + exercise settings from Settings.
