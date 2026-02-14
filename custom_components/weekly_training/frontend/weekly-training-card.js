@@ -1,9 +1,8 @@
 /* Weekly Training Card (HA-style, tablet-friendly, responsive).
  *
  * Focus retention strategy:
- * - Use local draft state for text/number fields.
- * - Only persist to backend on explicit Save (or Generate).
- * - Track focused element via data-focus-key and restore after renders.
+ * - Avoid re-rendering on every keystroke (keeps native focus/cursor stable).
+ * - Persist to backend only on explicit Save (or Generate).
  */
 
 class WeeklyTrainingCard extends HTMLElement {
@@ -28,6 +27,8 @@ class WeeklyTrainingCard extends HTMLElement {
     this._entryId = "";
     this._state = null; // backend state
     this._activePerson = null;
+    this._weekOffset = 0;
+    this._selectedWeekday = null; // 0..6
     this._draft = {
       planning_mode: "auto",
       duration_minutes: 45,
@@ -144,6 +145,8 @@ class WeeklyTrainingCard extends HTMLElement {
   _applyStateToDraft() {
     const st = this._state || {};
     const overrides = st.overrides || {};
+    this._weekOffset = Number(overrides.week_offset ?? 0);
+    this._selectedWeekday = overrides.selected_weekday ?? null;
     this._draft.planning_mode = String(overrides.planning_mode || "auto");
     this._draft.duration_minutes = Number(overrides.duration_minutes ?? 45);
     this._draft.preferred_exercises = String(overrides.preferred_exercises || "");
@@ -165,7 +168,15 @@ class WeeklyTrainingCard extends HTMLElement {
   _activePlan() {
     const plans = this._state?.plans && typeof this._state.plans === "object" ? this._state.plans : {};
     const id = this._activePersonId();
-    return (id && plans[id]) ? plans[id] : null;
+    const personPlans = (id && plans[id] && typeof plans[id] === "object") ? plans[id] : {};
+    const runtime = this._state?.runtime || {};
+    const currentWeekStart = String(runtime.current_week_start || "");
+    // Compute selected week start from currentWeekStart + offset.
+    if (!currentWeekStart) return null;
+    const ws = new Date(currentWeekStart + "T00:00:00Z");
+    ws.setUTCDate(ws.getUTCDate() + (Number(this._weekOffset || 0) * 7));
+    const key = ws.toISOString().slice(0, 10);
+    return personPlans[key] || null;
   }
 
   async _saveOverrides() {
@@ -178,6 +189,8 @@ class WeeklyTrainingCard extends HTMLElement {
         type: "weekly_training/set_overrides",
         entry_id: this._entryId,
         overrides: {
+          week_offset: Number(this._weekOffset || 0),
+          selected_weekday: this._selectedWeekday,
           planning_mode: this._draft.planning_mode,
           duration_minutes: Number(this._draft.duration_minutes || 45),
           preferred_exercises: String(this._draft.preferred_exercises || ""),
@@ -220,7 +233,7 @@ class WeeklyTrainingCard extends HTMLElement {
     try {
       // Persist draft first so generation uses latest values
       await this._saveOverrides();
-      const res = await this._callWS({ type: "weekly_training/generate_plan", entry_id: this._entryId });
+      await this._callWS({ type: "weekly_training/generate_plan", entry_id: this._entryId });
       // Refresh state after generation
       const st = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId });
       this._state = st?.state || this._state;
@@ -259,18 +272,15 @@ class WeeklyTrainingCard extends HTMLElement {
 
   _onChangeDraft(key, value) {
     this._draft[key] = value;
-    this._render();
   }
 
   _onChangeSession(slot, value) {
     const v = String(value || "");
     this._draft.session_overrides = { ...(this._draft.session_overrides || {}), [slot]: v === "Auto" ? "" : v };
-    this._render();
   }
 
   _onNewPersonChange(key, value) {
     this._newPerson[key] = value;
-    this._render();
   }
 
   _render() {
@@ -283,6 +293,14 @@ class WeeklyTrainingCard extends HTMLElement {
     const plan = this._activePlan();
     const planningMode = String(this._draft.planning_mode || "auto");
     const manual = planningMode === "manual";
+    const runtime = this._state?.runtime || {};
+    const currentWeekNumber = Number(runtime.current_week_number || 0);
+    const weekLabel = currentWeekNumber ? `Week ${currentWeekNumber + Number(this._weekOffset || 0)}` : "Week";
+    const todayIso = String(runtime.today || "");
+    const todayW = todayIso ? new Date(todayIso + "T00:00:00Z").getUTCDay() : null;
+    // Convert JS Sunday=0 to our Monday=0
+    const todayWeekday = todayW == null ? null : ((todayW + 6) % 7);
+    const selectedWeekday = this._selectedWeekday == null ? todayWeekday : Number(this._selectedWeekday);
 
     const peopleOptions = people
       .map((p) => ({ id: String(p.id || ""), name: String(p.name || "") }))
@@ -382,7 +400,27 @@ class WeeklyTrainingCard extends HTMLElement {
 
           <div class="grid">
             <div class="section">
-              <div class="row compact">
+              <div class="weekbar">
+                <div class="weeknav">
+                  <button id="week-prev" title="Previous week" ${saving ? "disabled" : ""}>&lt;</button>
+                  <div class="pill">${this._escape(weekLabel)}</div>
+                  <button id="week-next" title="Next week" ${saving ? "disabled" : ""}>&gt;</button>
+                </div>
+                <div class="pill muted">Pick day, then Generate</div>
+              </div>
+
+              <div class="daybar" role="group" aria-label="Weekday selector">
+                ${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((d, idx) => {
+                  const cls = [
+                    "daybtn",
+                    (idx === selectedWeekday ? "active" : ""),
+                    (idx === todayWeekday ? "today" : "")
+                  ].filter(Boolean).join(" ");
+                  return `<button class="${cls}" data-day="${idx}" ${saving ? "disabled" : ""}>${d}</button>`;
+                }).join("")}
+              </div>
+
+              <div class="row compact" style="margin-top:12px">
                 <div>
                   <div class="label">Person</div>
                   <select data-focus-key="person" id="person-select" ${saving ? "disabled" : ""}>
@@ -496,25 +534,38 @@ class WeeklyTrainingCard extends HTMLElement {
     personSel?.addEventListener("change", (e) => this._setActivePerson(e.target.value));
 
     const modeSel = this.shadowRoot.querySelector("#planning-mode");
-    modeSel?.addEventListener("change", (e) => this._onChangeDraft("planning_mode", String(e.target.value || "auto")));
+    modeSel?.addEventListener("change", (e) => { this._draft.planning_mode = String(e.target.value || "auto"); });
 
     const duration = this.shadowRoot.querySelector("#duration");
-    duration?.addEventListener("input", (e) => this._onChangeDraft("duration_minutes", Number(e.target.value || 45)));
+    duration?.addEventListener("input", (e) => { this._draft.duration_minutes = Number(e.target.value || 45); });
 
     const pref = this.shadowRoot.querySelector("#preferred");
-    pref?.addEventListener("input", (e) => this._onChangeDraft("preferred_exercises", String(e.target.value || "")));
+    pref?.addEventListener("input", (e) => { this._draft.preferred_exercises = String(e.target.value || ""); });
 
     this.shadowRoot.querySelector("#save")?.addEventListener("click", () => this._saveOverrides());
     this.shadowRoot.querySelector("#generate")?.addEventListener("click", () => this._generate());
     this.shadowRoot.querySelector("#reload")?.addEventListener("click", () => { this._state = null; this._load(); });
 
+    // Week nav
+    this.shadowRoot.querySelector("#week-prev")?.addEventListener("click", () => { this._weekOffset = Number(this._weekOffset || 0) - 1; this._saveOverrides(); });
+    this.shadowRoot.querySelector("#week-next")?.addEventListener("click", () => { this._weekOffset = Number(this._weekOffset || 0) + 1; this._saveOverrides(); });
+
+    // Day selector
+    this.shadowRoot.querySelectorAll("button[data-day]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const d = Number(e.currentTarget.getAttribute("data-day"));
+        this._selectedWeekday = Number.isFinite(d) ? d : null;
+        this._saveOverrides();
+      });
+    });
+
     // New person controls
-    this.shadowRoot.querySelector("#new-name")?.addEventListener("input", (e) => this._onNewPersonChange("name", String(e.target.value || "")));
-    this.shadowRoot.querySelector("#new-gender")?.addEventListener("change", (e) => this._onNewPersonChange("gender", String(e.target.value || "male")));
-    this.shadowRoot.querySelector("#new-sq")?.addEventListener("input", (e) => this._onNewPersonChange("max_squat", Number(e.target.value || 0)));
-    this.shadowRoot.querySelector("#new-dl")?.addEventListener("input", (e) => this._onNewPersonChange("max_deadlift", Number(e.target.value || 0)));
-    this.shadowRoot.querySelector("#new-bp")?.addEventListener("input", (e) => this._onNewPersonChange("max_bench", Number(e.target.value || 0)));
-    this.shadowRoot.querySelector("#new-units")?.addEventListener("change", (e) => this._onNewPersonChange("units", String(e.target.value || "kg")));
+    this.shadowRoot.querySelector("#new-name")?.addEventListener("input", (e) => { this._newPerson.name = String(e.target.value || ""); });
+    this.shadowRoot.querySelector("#new-gender")?.addEventListener("change", (e) => { this._newPerson.gender = String(e.target.value || "male"); });
+    this.shadowRoot.querySelector("#new-sq")?.addEventListener("input", (e) => { this._newPerson.max_squat = Number(e.target.value || 0); });
+    this.shadowRoot.querySelector("#new-dl")?.addEventListener("input", (e) => { this._newPerson.max_deadlift = Number(e.target.value || 0); });
+    this.shadowRoot.querySelector("#new-bp")?.addEventListener("input", (e) => { this._newPerson.max_bench = Number(e.target.value || 0); });
+    this.shadowRoot.querySelector("#new-units")?.addEventListener("change", (e) => { this._newPerson.units = String(e.target.value || "kg"); });
     this.shadowRoot.querySelector("#add-person")?.addEventListener("click", () => this._addPerson());
 
     // Manual session inputs (persist into draft session_overrides)
@@ -522,11 +573,11 @@ class WeeklyTrainingCard extends HTMLElement {
       el.addEventListener("input", (e) => {
         const slot = String(e.target.getAttribute("data-slot") || "");
         if (!slot) return;
-        this._onChangeSession(slot, String(e.target.value || ""));
+        this._draft.session_overrides = { ...(this._draft.session_overrides || {}), [slot]: String(e.target.value || "") };
       });
     });
 
-    // Restore focus after re-render
+    // Restore focus after re-render (only happens on load/save/generate)
     queueMicrotask(() => this._restoreFocus());
   }
 
@@ -541,3 +592,18 @@ class WeeklyTrainingCard extends HTMLElement {
 }
 
 customElements.define("weekly-training-card", WeeklyTrainingCard);
+        .weekbar { display:flex; align-items:center; justify-content:space-between; gap: 8px; flex-wrap:wrap; }
+        .weeknav { display:flex; gap:8px; align-items:center; }
+        .weeknav button { width: 38px; height: 38px; padding: 0; }
+        .daybar { display:flex; gap:6px; flex-wrap:wrap; margin-top: 10px; }
+        .daybtn {
+          height: 34px;
+          min-width: 44px;
+          border-radius: 999px;
+          border: 1px solid var(--divider-color);
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          cursor: pointer;
+        }
+        .daybtn.active { border-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 15%, var(--card-background-color)); }
+        .daybtn.today { box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary-color) 35%, transparent) inset; }

@@ -3,8 +3,8 @@
 State model (schema v1):
 - people: list of people profiles (gender, defaults, 1RM maxes, preferences)
 - active_person_id: which person the UI controls target by default
-- overrides: per-entry generation overrides (duration/preferred + planning mode + session picks)
-- plans: mapping person_id -> last generated plan payload
+- overrides: per-entry generation overrides (week offset/day + duration/preferred + planning mode + session picks)
+- plans: mapping person_id -> mapping week_start -> plan payload
 """
 
 from __future__ import annotations
@@ -84,6 +84,8 @@ class WeeklyTrainingStore:
             self._data.setdefault(
                 "overrides",
                 {
+                    "week_offset": 0,  # 0 = current week
+                    "selected_weekday": None,  # 0..6, default to "today" in coordinator/UI
                     "duration_minutes": None,
                     "preferred_exercises": "",
                     "planning_mode": "auto",  # auto | manual
@@ -136,6 +138,8 @@ class WeeklyTrainingStore:
         person = next((p for p in people if isinstance(p, dict) and str(p.get("id")) == person_id), None)
         if isinstance(person, dict):
             state["overrides"] = {
+                "week_offset": 0,
+                "selected_weekday": None,
                 "duration_minutes": int(person.get("duration_minutes") or DEFAULT_DURATION_MINUTES),
                 "preferred_exercises": str(person.get("preferred_exercises") or ""),
                 "planning_mode": "auto",
@@ -156,6 +160,8 @@ class WeeklyTrainingStore:
     async def async_set_overrides(
         self,
         *,
+        week_offset: int | None = None,
+        selected_weekday: int | None = None,
         duration_minutes: int | None = None,
         preferred_exercises: str | None = None,
         planning_mode: str | None = None,
@@ -165,11 +171,17 @@ class WeeklyTrainingStore:
         overrides = state.get("overrides") if isinstance(state, dict) else None
         if not isinstance(overrides, dict):
             overrides = {
+                "week_offset": 0,
+                "selected_weekday": None,
                 "duration_minutes": None,
                 "preferred_exercises": "",
                 "planning_mode": "auto",
                 "session_overrides": {},
             }
+        if week_offset is not None:
+            overrides["week_offset"] = int(week_offset)
+        if selected_weekday is not None:
+            overrides["selected_weekday"] = int(selected_weekday)
         if duration_minutes is not None:
             overrides["duration_minutes"] = int(duration_minutes)
         if preferred_exercises is not None:
@@ -247,11 +259,25 @@ class WeeklyTrainingStore:
             state["active_person_id"] = str(people[0].get("id")) if people else ""
         return await self.async_save(state)
 
-    async def async_save_plan(self, *, person_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+    async def async_save_plan(self, *, person_id: str, week_start: str, plan: dict[str, Any]) -> dict[str, Any]:
         state = await self.async_load()
         plans = state.get("plans")
         if not isinstance(plans, dict):
             plans = {}
-        plans[str(person_id)] = dict(plan or {})
+        person_plans = plans.get(str(person_id))
+        if not isinstance(person_plans, dict):
+            person_plans = {}
+        person_plans[str(week_start)] = dict(plan or {})
+        plans[str(person_id)] = person_plans
         state["plans"] = plans
         return await self.async_save(state)
+
+    def get_plan(self, state: dict[str, Any], *, person_id: str, week_start: str) -> dict[str, Any] | None:
+        plans = state.get("plans") if isinstance(state, dict) else None
+        if not isinstance(plans, dict):
+            return None
+        person_plans = plans.get(str(person_id))
+        if not isinstance(person_plans, dict):
+            return None
+        plan = person_plans.get(str(week_start))
+        return plan if isinstance(plan, dict) else None

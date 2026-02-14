@@ -42,9 +42,13 @@ class WeeklyPlanSensor(CoordinatorEntity[WeeklyTrainingCoordinator], SensorEntit
     def native_value(self) -> str:
         data = self.coordinator.data or {}
         if isinstance(data, dict):
+            overrides = data.get("overrides", {}) if isinstance(data.get("overrides"), dict) else {}
+            week_offset = int(overrides.get("week_offset") or 0)
+            week_start = self.coordinator._week_start_for_offset(week_offset).isoformat()  # noqa: SLF001
             active_id = str(data.get("active_person_id") or "")
             plans = data.get("plans", {}) if isinstance(data.get("plans"), dict) else {}
-            plan = plans.get(active_id) if active_id else None
+            person_plans = plans.get(active_id) if active_id and isinstance(plans.get(active_id), dict) else {}
+            plan = person_plans.get(week_start) if isinstance(person_plans, dict) else None
             if isinstance(plan, dict) and plan.get("week_number") is not None:
                 return str(plan.get("week_number"))
         return "not_generated"
@@ -56,8 +60,12 @@ class WeeklyPlanSensor(CoordinatorEntity[WeeklyTrainingCoordinator], SensorEntit
         person = None
         if isinstance(data, dict):
             active_id = str(data.get("active_person_id") or "")
+            overrides = data.get("overrides", {}) if isinstance(data.get("overrides"), dict) else {}
+            week_offset = int(overrides.get("week_offset") or 0)
+            week_start = self.coordinator._week_start_for_offset(week_offset).isoformat()  # noqa: SLF001
             plans = data.get("plans", {}) if isinstance(data.get("plans"), dict) else {}
-            plan = plans.get(active_id) if active_id else None
+            person_plans = plans.get(active_id) if active_id and isinstance(plans.get(active_id), dict) else {}
+            plan = person_plans.get(week_start) if isinstance(person_plans, dict) else None
             people = data.get("people", []) if isinstance(data.get("people"), list) else []
             person = next((p for p in people if isinstance(p, dict) and str(p.get("id") or "") == active_id), None)
         attrs: dict[str, Any] = {

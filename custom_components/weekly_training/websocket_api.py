@@ -8,6 +8,9 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
+from datetime import timedelta
+
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .ws_state import public_state
@@ -43,7 +46,23 @@ async def ws_get_state(
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
     state = await coordinator.store.async_load()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    today = dt_util.as_local(dt_util.utcnow()).date()
+    current_week_start = (today - timedelta(days=today.weekday())).isoformat()
+    current_week_number = int(today.isocalendar().week)
+    connection.send_result(
+        msg["id"],
+        {
+            "entry_id": entry_id,
+            "state": public_state(
+                state,
+                runtime={
+                    "today": today.isoformat(),
+                    "current_week_start": current_week_start,
+                    "current_week_number": current_week_number,
+                },
+            ),
+        },
+    )
 
 
 @websocket_api.websocket_command(
@@ -91,6 +110,8 @@ async def ws_set_overrides(
     if not isinstance(raw, dict):
         raw = {}
     state = await coordinator.store.async_set_overrides(
+        week_offset=raw.get("week_offset"),
+        selected_weekday=raw.get("selected_weekday"),
         duration_minutes=raw.get("duration_minutes"),
         preferred_exercises=raw.get("preferred_exercises"),
         planning_mode=raw.get("planning_mode"),
@@ -166,9 +187,13 @@ async def ws_get_plan(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = coordinator.data or {}
-    plan = state.get("plan") if isinstance(state, dict) else None
-    connection.send_result(msg["id"], {"entry_id": entry_id, "plan": plan or {}})
+    state = await coordinator.store.async_load()
+    overrides = state.get("overrides", {}) if isinstance(state, dict) else {}
+    active_id = str(state.get("active_person_id") or "")
+    week_offset = int(overrides.get("week_offset") or 0) if isinstance(overrides, dict) else 0
+    week_start_day = coordinator._week_start_for_offset(week_offset).isoformat()  # noqa: SLF001
+    plan = coordinator.store.get_plan(state, person_id=active_id, week_start=week_start_day) if active_id else None
+    connection.send_result(msg["id"], {"entry_id": entry_id, "week_start": week_start_day, "plan": plan or {}})
 
 
 @websocket_api.websocket_command(
@@ -188,15 +213,8 @@ async def ws_generate_plan(
     if coordinator is None:
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
-    state = await coordinator.async_generate_plan()
-    # Return latest plan for active person
-    if isinstance(state, dict):
-        active_id = str(state.get("active_person_id") or "")
-        plans = state.get("plans", {}) if isinstance(state.get("plans"), dict) else {}
-        plan = plans.get(active_id) if active_id else None
-    else:
-        plan = None
-    connection.send_result(msg["id"], {"entry_id": entry_id, "plan": plan or {}})
+    state = await coordinator.async_generate_for_day()
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
 
 
 def async_register(hass: HomeAssistant) -> None:

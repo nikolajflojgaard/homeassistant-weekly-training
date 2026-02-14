@@ -57,14 +57,15 @@ async def async_register(hass: HomeAssistant) -> None:
         coordinator = await _coordinator_for_entry(entry_id)
         if coordinator is None:
             return {"ok": False, "error": "entry_not_found"}
-        # Optional: generate for a specific person_id if provided
         person_id = str(call.data.get("person_id") or "").strip()
-        state = await coordinator.async_generate_plan(person_id=person_id or None)
-        plan = (state.get("plans", {}) or {}).get(person_id) if person_id else None
-        if not plan and isinstance(state, dict):
-            active_id = str(state.get("active_person_id") or "")
-            plan = (state.get("plans", {}) or {}).get(active_id)
-        return {"ok": True, "entry_id": entry_id, "plan": plan or {}}
+        week_offset = call.data.get("week_offset")
+        weekday = call.data.get("weekday")
+        state = await coordinator.async_generate_for_day(
+            person_id=person_id or None,
+            week_offset=int(week_offset) if week_offset is not None else None,
+            weekday=int(weekday) if weekday is not None else None,
+        )
+        return {"ok": True, "entry_id": entry_id, "state": state}
 
     async def _async_get(call: ServiceCall) -> ServiceResponse:
         entry_id = str(call.data["entry_id"])
@@ -72,16 +73,7 @@ async def async_register(hass: HomeAssistant) -> None:
         if coordinator is None:
             return {"ok": False, "error": "entry_not_found"}
         state = coordinator.data or {}
-        person_id = str(call.data.get("person_id") or "").strip()
-        if isinstance(state, dict):
-            plans = state.get("plans", {}) if isinstance(state.get("plans"), dict) else {}
-            if not person_id:
-                person_id = str(state.get("active_person_id") or "")
-            plan = plans.get(person_id) if person_id else None
-            people = state.get("people", []) if isinstance(state.get("people"), list) else []
-            person = next((p for p in people if isinstance(p, dict) and str(p.get("id") or "") == person_id), None)
-            return {"ok": True, "entry_id": entry_id, "person": person or {}, "plan": plan or {}}
-        return {"ok": True, "entry_id": entry_id, "person": {}, "plan": {}}
+        return {"ok": True, "entry_id": entry_id, "state": state}
 
     async def _async_list_people(call: ServiceCall) -> ServiceResponse:
         entry_id = str(call.data["entry_id"])
@@ -159,7 +151,14 @@ async def async_register(hass: HomeAssistant) -> None:
             DOMAIN,
             SERVICE_GENERATE,
             _async_generate,
-            schema=vol.Schema({vol.Required("entry_id"): str, vol.Optional("person_id"): str}),
+            schema=vol.Schema(
+                {
+                    vol.Required("entry_id"): str,
+                    vol.Optional("person_id"): str,
+                    vol.Optional("week_offset"): vol.Coerce(int),
+                    vol.Optional("weekday"): vol.Coerce(int),
+                }
+            ),
             supports_response=SupportsResponse.ONLY,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_GET):
@@ -167,7 +166,7 @@ async def async_register(hass: HomeAssistant) -> None:
             DOMAIN,
             SERVICE_GET,
             _async_get,
-            schema=vol.Schema({vol.Required("entry_id"): str, vol.Optional("person_id"): str}),
+            schema=_ENTRY_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_LIST_PEOPLE):

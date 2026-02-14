@@ -1,6 +1,6 @@
 generate_weekly_plan:
   name: Generate weekly plan
-  description: Generate and persist this week's full-body strength plan.
+  description: Generate and persist a full-body strength session for the selected weekday.
   fields:
     entry_id:
       name: Entry ID
@@ -14,21 +14,33 @@ generate_weekly_plan:
       required: false
       selector:
         text:
+    week_offset:
+      name: Week offset
+      description: 0 = current week, 1 = next week, -1 = previous week.
+      required: false
+      selector:
+        number:
+          min: -8
+          max: 8
+          mode: box
+    weekday:
+      name: Weekday
+      description: 0=Mon ... 6=Sun
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 6
+          mode: box
 
 get_weekly_plan:
   name: Get weekly plan
-  description: Return the latest generated weekly plan.
+  description: Return the stored state (people, overrides, plans).
   fields:
     entry_id:
       name: Entry ID
       description: Config entry ID.
       required: true
-      selector:
-        text:
-    person_id:
-      name: Person ID
-      description: Optional person id to read plan for (defaults to active person).
-      required: false
       selector:
         text:
 

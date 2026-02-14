@@ -1,4 +1,8 @@
-"""Weekly plan generator."""
+"""Weekly plan generator.
+
+This integration treats each ISO week as a blank canvas.
+You generate sessions day-by-day and store them under that week.
+"""
 
 from __future__ import annotations
 
@@ -71,21 +75,71 @@ def _pick_one(library: dict[str, Any], *, tags_any: set[str], ctx: PickContext, 
     return matches[0] if matches else {"name": "Bodyweight Squat", "tags": ["squat"], "equipment": ["bodyweight"]}
 
 
-def build_weekly_plan(
+def _slot_for_weekday(weekday: int) -> str:
+    # A early week, B mid-week, C end-week
+    if weekday <= 1:
+        return "A"
+    if weekday <= 3:
+        return "B"
+    return "C"
+
+def _render_markdown(*, week_number: int, week_start: str, plan: dict[str, Any]) -> str:
+    workouts = plan.get("workouts", [])
+    if not isinstance(workouts, list):
+        workouts = []
+    workouts_sorted = sorted(
+        [w for w in workouts if isinstance(w, dict)],
+        key=lambda w: str(w.get("date") or ""),
+    )
+    units = str((plan.get("profile") or {}).get("units") or "kg")
+
+    lines: list[str] = []
+    lines.append(f"# Weekly Training Plan (ISO week {week_number})")
+    lines.append(f"- Week start: {week_start}")
+    lines.append("")
+    if not workouts_sorted:
+        lines.append("_No sessions generated yet._")
+        return "\n".join(lines).strip()
+
+    for w in workouts_sorted:
+        name = str(w.get("name") or "Session")
+        date_iso = str(w.get("date") or "")
+        lines.append(f"## {name} ({date_iso})")
+        items = w.get("items", [])
+        if not isinstance(items, list):
+            items = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            ex = str(item.get("exercise") or "")
+            sr = str(item.get("sets_reps") or "")
+            load = item.get("suggested_load")
+            if load:
+                lines.append(f"- {ex}: {sr} @ ~{load:g}{units}")
+            else:
+                lines.append(f"- {ex}: {sr}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+def generate_session(
     *,
     profile: dict[str, Any],
     library: dict[str, Any],
-    overrides: dict[str, Any] | None = None,
+    overrides: dict[str, Any],
+    week_start_day: date,
+    weekday: int,
+    existing_plan: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Build a full-body strength plan for the current ISO week.
+    """Generate one day's full-body session and merge into the weekly plan."""
+    week_number = _iso_week_number(week_start_day)
+    session_date = week_start_day + timedelta(days=int(weekday))
+    session_date_iso = session_date.isoformat()
 
-    Plan structure:
-    - 3 sessions: A / B / C (full body)
-    - Each session: main lower + main push + main pull + accessory + core
-    """
-    now_local = dt_util.as_local(dt_util.utcnow()).date()
-    monday = _week_start(now_local)
-    week_number = _iso_week_number(monday)
+    overrides = overrides or {}
+    planning_mode = str(overrides.get("planning_mode") or "auto").lower()
+    session_overrides = overrides.get("session_overrides") if isinstance(overrides.get("session_overrides"), dict) else {}
+    if not isinstance(session_overrides, dict):
+        session_overrides = {}
 
     gender = str(profile.get("gender") or "male").lower()
     duration = int(profile.get("duration_minutes") or 45)
@@ -103,12 +157,7 @@ def build_weekly_plan(
     accessory_reps = "3 x 10"
     core_reps = "3 x 12"
 
-    overrides = overrides or {}
-    planning_mode = str(overrides.get("planning_mode") or "auto").lower()
-    session_overrides = overrides.get("session_overrides") if isinstance(overrides.get("session_overrides"), dict) else {}
-    if not isinstance(session_overrides, dict):
-        session_overrides = {}
-
+    # Index exercises by name to allow manual selection by name.
     exercises = library.get("exercises", [])
     if not isinstance(exercises, list):
         exercises = []
@@ -120,23 +169,27 @@ def build_weekly_plan(
             return set()
         return {str(t).strip().lower() for t in (ex.get("tags") or []) if str(t).strip()}
 
-    # Rule: if user chooses squat, do not suggest deadlift (and vice versa).
-    # Determine chosen "lower family" from manual selections first.
-    manual_lower = [
-        str(session_overrides.get(k) or "").strip()
-        for k in ("a_lower", "b_lower", "c_lower")
-        if str(session_overrides.get(k) or "").strip()
-    ]
+    # Determine lower_family across the week so SQ and DL don't both appear.
     lower_family = ""
-    for ex_name in manual_lower:
-        t = tags_for(ex_name)
-        if "squat" in t:
-            lower_family = "squat"
-            break
-        if "deadlift" in t or "hinge" in t:
-            lower_family = "deadlift"
-            break
-    # If still not set, infer from preferred tokens.
+    if isinstance(existing_plan, dict):
+        meta = existing_plan.get("meta")
+        if isinstance(meta, dict):
+            lower_family = str(meta.get("lower_family") or "")
+    if not lower_family:
+        # Derive from manual "lower" picks first (for this week's templates).
+        manual_lower = [
+            str(session_overrides.get(k) or "").strip()
+            for k in ("a_lower", "b_lower", "c_lower")
+            if str(session_overrides.get(k) or "").strip()
+        ]
+        for ex_name in manual_lower:
+            t = tags_for(ex_name)
+            if "squat" in t:
+                lower_family = "squat"
+                break
+            if "deadlift" in t or "hinge" in t:
+                lower_family = "deadlift"
+                break
     if not lower_family:
         if "squat" in preferred:
             lower_family = "squat"
@@ -146,24 +199,19 @@ def build_weekly_plan(
         lower_family = "squat"
 
     def _manual_or_pick(
-        slot: str,
+        slot_key: str,
         *,
         tags_any: set[str],
         fallback_tags_any: set[str],
         disallow_tags: set[str] | None = None,
     ) -> dict[str, Any]:
-        chosen = str(session_overrides.get(slot) or "").strip()
-        # Only honor manual choices when planning_mode=manual
+        chosen = str(session_overrides.get(slot_key) or "").strip()
         if planning_mode == "manual" and chosen and chosen in by_name:
             t = tags_for(chosen)
             if disallow_tags and not t.isdisjoint(disallow_tags):
-                # Conflict with enforced family: ignore manual and auto-pick.
                 pass
             else:
                 ex = by_name.get(chosen)
-                if isinstance(ex, dict) and _matches_preferences(ex, ctx):
-                    return ex
-                # If it doesn't match equipment/preferences, still honor manual selection.
                 if isinstance(ex, dict):
                     return ex
         return _pick_one(library, tags_any=tags_any, ctx=ctx, fallback_tags_any=fallback_tags_any)
@@ -171,23 +219,30 @@ def build_weekly_plan(
     disallow_deadlift = {"deadlift", "hinge"}
     disallow_squat = {"squat"}
 
-    # Lower picks respect lower_family.
-    if lower_family == "squat":
-        lower_a = _manual_or_pick("a_lower", tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
-        lower_b = _manual_or_pick("b_lower", tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
-        lower_c = _manual_or_pick("c_lower", tags_any={"lunge", "single_leg"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
-    else:
-        lower_a = _manual_or_pick("a_lower", tags_any={"deadlift", "hinge"}, fallback_tags_any={"hinge"}, disallow_tags=disallow_squat)
-        lower_b = _manual_or_pick("b_lower", tags_any={"deadlift", "hinge"}, fallback_tags_any={"hinge"}, disallow_tags=disallow_squat)
-        lower_c = _manual_or_pick("c_lower", tags_any={"lunge", "single_leg"}, fallback_tags_any={"leg"}, disallow_tags=disallow_squat)
+    slot = _slot_for_weekday(int(weekday))
+    slot_key = slot.lower()
 
-    # Push/pull: manual per session if set, otherwise auto.
-    push_a = _manual_or_pick("a_push", tags_any={"bench", "push"}, fallback_tags_any={"push"})
-    pull_a = _manual_or_pick("a_pull", tags_any={"row", "pull"}, fallback_tags_any={"pull"})
-    push_b = _manual_or_pick("b_push", tags_any={"overhead_press", "press", "push"}, fallback_tags_any={"push"})
-    pull_b = _manual_or_pick("b_pull", tags_any={"pullup", "lat", "pull"}, fallback_tags_any={"pull"})
-    push_c = _manual_or_pick("c_push", tags_any={"dumbbell_press", "bench", "push"}, fallback_tags_any={"push"})
-    pull_c = _manual_or_pick("c_pull", tags_any={"row", "pull"}, fallback_tags_any={"pull"})
+    # Lower: A/B are main lower, C is more single-leg by default.
+    if slot == "C":
+        lower = _manual_or_pick(f"{slot_key}_lower", tags_any={"lunge", "single_leg"}, fallback_tags_any={"leg"})
+    else:
+        if lower_family == "squat":
+            lower = _manual_or_pick(
+                f"{slot_key}_lower",
+                tags_any={"squat"},
+                fallback_tags_any={"leg"},
+                disallow_tags=disallow_deadlift,
+            )
+        else:
+            lower = _manual_or_pick(
+                f"{slot_key}_lower",
+                tags_any={"deadlift", "hinge"},
+                fallback_tags_any={"hinge"},
+                disallow_tags=disallow_squat,
+            )
+
+    push = _manual_or_pick(f"{slot_key}_push", tags_any={"bench", "push", "press"}, fallback_tags_any={"push"})
+    pull = _manual_or_pick(f"{slot_key}_pull", tags_any={"row", "pull", "pullup"}, fallback_tags_any={"pull"})
 
     accessory = _pick_one(library, tags_any={"shoulders", "rear_delt"}, ctx=ctx, fallback_tags_any={"shoulders"})
     core = _pick_one(library, tags_any={"core"}, ctx=ctx, fallback_tags_any={"core"})
@@ -233,73 +288,36 @@ def build_weekly_plan(
             item["units"] = units
         return item
 
-    def session(name: str, day_offset: int, items: list[dict[str, Any]]) -> dict[str, Any]:
-        session_date = (monday + timedelta(days=day_offset)).isoformat()
-        return {"name": name, "date": session_date, "items": items}
-
-    a_items = [
-        _item("main_lower", lower_a["name"], main_reps),
-        _item("main_push", push_a["name"], main_reps),
-        _item("main_pull", pull_a["name"], main_reps),
-        _item("accessory", accessory["name"], accessory_reps),
-        _item("core", core["name"], core_reps),
-    ]
-    b_items = [
-        _item("main_lower", lower_b["name"], main_reps),
-        _item("main_push", push_b["name"], main_reps),
-        _item("main_pull", pull_b["name"], main_reps),
-        _item("accessory", accessory["name"], accessory_reps),
-        _item("core", core["name"], core_reps),
-    ]
-    c_items = [
-        _item("main_lower", lower_c["name"], main_reps),
-        _item("main_push", push_c["name"], main_reps),
-        _item("main_pull", pull_c["name"], main_reps),
-        _item("accessory", accessory["name"], accessory_reps),
-        _item("core", core["name"], core_reps),
+    items = [
+        _item("main_lower", str(lower.get("name") or ""), main_reps),
+        _item("main_push", str(push.get("name") or ""), main_reps),
+        _item("main_pull", str(pull.get("name") or ""), main_reps),
+        _item("accessory", str(accessory.get("name") or ""), accessory_reps),
+        _item("core", str(core.get("name") or ""), core_reps),
     ]
     if extra_accessory:
-        a_items.insert(4, _item("accessory_2", extra_accessory["name"], accessory_reps))
-        b_items.insert(4, _item("accessory_2", extra_accessory["name"], accessory_reps))
-        c_items.insert(4, _item("accessory_2", extra_accessory["name"], accessory_reps))
+        items.insert(4, _item("accessory_2", str(extra_accessory.get("name") or ""), accessory_reps))
 
-    workouts = [
-        session("Full Body A", 0, a_items),
-        session("Full Body B", 2, b_items),
-        session("Full Body C", 4, c_items),
-    ]
-
-    # Render markdown for dashboards/notifications.
-    lines: list[str] = []
-    lines.append(f"# Weekly Training Plan (ISO week {week_number})")
-    lines.append("")
-    lines.append(f"- Duration target: ~{duration} min")
-    lines.append(f"- Gender setting: {gender}")
-    if preferred:
-        lines.append(f"- Preferred: {', '.join(sorted(preferred))}")
-    if equipment:
-        lines.append(f"- Equipment: {', '.join(sorted(equipment))}")
-    lines.append("")
-    for w in workouts:
-        lines.append(f"## {w['name']} ({w['date']})")
-        for item in w["items"]:
-            load = item.get("suggested_load")
-            if load:
-                lines.append(f"- {item['exercise']}: {item['sets_reps']} @ ~{load:g}{units}")
-            else:
-                lines.append(f"- {item['exercise']}: {item['sets_reps']}")
-        lines.append("")
-    markdown = "\n".join(lines).strip()
-
-    return {
-        "week_number": week_number,
-        "week_start": monday.isoformat(),
-        "generated_at": dt_util.utcnow().isoformat(),
-        "profile": {"gender": gender, "duration_minutes": duration, "units": units},
-        "meta": {
-            "planning_mode": planning_mode,
-            "lower_family": lower_family
-        },
-        "workouts": workouts,
-        "markdown": markdown,
+    workout = {
+        "name": f"Full Body {slot}",
+        "date": session_date_iso,
+        "weekday": int(weekday),
+        "items": items,
     }
+
+    plan = dict(existing_plan or {})
+    plan["week_number"] = week_number
+    plan["week_start"] = week_start_day.isoformat()
+    plan["generated_at"] = dt_util.utcnow().isoformat()
+    plan["profile"] = {"gender": gender, "duration_minutes": duration, "units": units}
+    plan["meta"] = {"planning_mode": planning_mode, "lower_family": lower_family}
+
+    workouts = plan.get("workouts")
+    if not isinstance(workouts, list):
+        workouts = []
+    # Replace existing workout for this date if present
+    workouts = [w for w in workouts if not (isinstance(w, dict) and str(w.get("date") or "") == session_date_iso)]
+    workouts.append(workout)
+    plan["workouts"] = workouts
+    plan["markdown"] = _render_markdown(week_number=week_number, week_start=week_start_day.isoformat(), plan=plan)
+    return plan

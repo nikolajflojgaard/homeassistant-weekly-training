@@ -36,4 +36,5 @@ class GenerateWeeklyPlanButton(ButtonEntity):
         self._attr_device_info = device_info_from_entry(entry)
 
     async def async_press(self) -> None:
-        await self._coordinator.async_generate_plan()
+        # Generate for currently selected week/day from overrides.
+        await self._coordinator.async_generate_for_day()
