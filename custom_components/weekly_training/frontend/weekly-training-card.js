@@ -73,6 +73,8 @@ class WeeklyTrainingCard extends HTMLElement {
 	      settingsQuery: "",
 	      showCyclePlanner: false,
 	      cycleDraft: null,
+	      showEditWorkout: false,
+	      editWorkout: null,
 	      showWorkout: false,
 	      workoutDay: null, // 0..6
 	      selectedDay: null, // 0..6
@@ -547,6 +549,62 @@ class WeeklyTrainingCard extends HTMLElement {
       this._ui.showCyclePlanner = false;
       this._ui.cycleDraft = null;
       this._showToast("Planned 4-week cycle", "", null);
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  _openEditWorkoutModal(personId, weekStartIso, workout) {
+    const pid = String(personId || "");
+    const wk = String(weekStartIso || "").slice(0, 10);
+    if (!pid || !wk || !workout || typeof workout !== "object") return;
+    const snap = JSON.parse(JSON.stringify(workout));
+    this._ui.editWorkout = { person_id: pid, week_start: wk, workout: snap };
+    this._ui.showEditWorkout = true;
+    this._render();
+  }
+
+  async _saveEditedWorkout() {
+    const d = this._ui && this._ui.editWorkout ? this._ui.editWorkout : null;
+    if (!d) return;
+    const pid = String(d.person_id || "");
+    const wk = String(d.week_start || "").slice(0, 10);
+    const w = d.workout && typeof d.workout === "object" ? d.workout : null;
+    if (!pid || !wk || !w) return;
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      await this._upsertWorkout(pid, wk, w);
+      this._ui.showEditWorkout = false;
+      this._ui.editWorkout = null;
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  async _deleteEditedWorkout() {
+    const d = this._ui && this._ui.editWorkout ? this._ui.editWorkout : null;
+    if (!d) return;
+    const pid = String(d.person_id || "");
+    const wk = String(d.week_start || "").slice(0, 10);
+    const dateIso = String(d.workout && d.workout.date ? d.workout.date : "");
+    if (!pid || !wk || !dateIso) return;
+    const ok = window.confirm("Delete this workout?");
+    if (!ok) return;
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      await this._deleteWorkout(pid, wk, dateIso);
+      this._ui.showEditWorkout = false;
+      this._ui.editWorkout = null;
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -1246,6 +1304,75 @@ class WeeklyTrainingCard extends HTMLElement {
 	            <div class="modal-f">
 	              <button id="cycle-cancel" ${saving ? "disabled" : ""}>Cancel</button>
 	              <button class="primary" id="cycle-plan" ${saving ? "disabled" : ""}>Plan</button>
+	            </div>
+	          </div>
+	        </div>
+	      `;
+	    })() : "";
+
+	    const editWorkoutModal = this._ui.showEditWorkout && this._ui.editWorkout ? (() => {
+	      const d = this._ui.editWorkout || {};
+	      const pid = String(d.person_id || "");
+	      const wk = String(d.week_start || "").slice(0, 10);
+	      const w = d.workout && typeof d.workout === "object" ? d.workout : {};
+	      const dateIso = String(w.date || "");
+	      const wname = String(w.name || "Workout");
+	      const items = Array.isArray(w.items) ? w.items : [];
+	      const person = this._personById(pid);
+	      const pname = person ? String(person.name || "") : "";
+	      const pcolor = person ? this._personColor(person) : "";
+	      return `
+	        <div class="modal-backdrop" id="editw-backdrop" aria-hidden="false">
+	          <div class="modal" role="dialog" aria-label="Edit workout">
+	            <div class="modal-h">
+	              <div class="modal-title">Workout details</div>
+	              <button class="icon-btn" id="editw-close" title="Close">\u00d7</button>
+	            </div>
+	            <div class="modal-b">
+	              <div class="hint">
+	                <span class="pcircle" style="background:${this._escape(pcolor)}">${this._escape((pname || "?").slice(0, 1).toUpperCase())}</span>
+	                <span style="margin-left:8px; font-weight:800">${this._escape(pname || pid)}</span>
+	                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
+	              </div>
+
+	              <div style="margin-top:12px">
+	                <div class="label">Name</div>
+	                <input data-focus-key="ew_name" id="ew-name" type="text" value="${this._escape(wname)}" ${saving ? "disabled" : ""}/>
+	              </div>
+
+	              <div class="divider"></div>
+	              <div class="label">Exercises</div>
+	              <div class="items" style="margin-top:10px">
+	                ${items.map((it, idx) => {
+	                  if (!it || typeof it !== "object") return "";
+	                  const ex = String(it.exercise || "");
+	                  const sr = String(it.sets_reps || "");
+	                  const load = it.suggested_load != null ? String(it.suggested_load) : "";
+	                  return `
+	                    <div class="item" style="display:grid; grid-template-columns: 1fr 140px 140px; gap: 10px; align-items:center">
+	                      <div>
+	                        <div class="ex">${this._escape(ex)}</div>
+	                        <div class="range">${this._escape(String(it.type || ""))}</div>
+	                      </div>
+	                      <div>
+	                        <div class="label" style="font-size:11px">Sets x reps</div>
+	                        <input data-focus-key="ew_sr_${idx}" data-ew-sr="${idx}" type="text" value="${this._escape(sr)}" ${saving ? "disabled" : ""}/>
+	                      </div>
+	                      <div>
+	                        <div class="label" style="font-size:11px">Load</div>
+	                        <input data-focus-key="ew_ld_${idx}" data-ew-load="${idx}" type="number" step="0.5" value="${this._escape(load)}" ${saving ? "disabled" : ""}/>
+	                      </div>
+	                    </div>
+	                  `;
+	                }).join("")}
+	              </div>
+	            </div>
+	            <div class="modal-f">
+	              <button class="danger" id="editw-delete" ${saving ? "disabled" : ""}>Delete</button>
+	              <div class="actions" style="margin:0">
+	                <button id="editw-cancel" ${saving ? "disabled" : ""}>Close</button>
+	                <button class="primary" id="editw-save" ${saving ? "disabled" : ""}>Save</button>
+	              </div>
 	            </div>
 	          </div>
 	        </div>
@@ -2261,6 +2388,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		          ${workoutModal}
 		          ${settingsModal}
 		          ${cycleModal}
+		          ${editWorkoutModal}
 		          ${historyModal}
 		          ${completedModal}
 		          ${toast}
@@ -2479,14 +2607,14 @@ class WeeklyTrainingCard extends HTMLElement {
 	    const qCyclePlan = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-plan") : null;
 	    if (qCyclePlan) qCyclePlan.addEventListener("click", () => { this._planCycle(); });
 
-    // Swipe actions on the generated workout (tablet-first).
-	    const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
-		    if (swipeZone && selectedWorkout) {
-		      const pid = String(this._activePersonId() || "");
-		      const wk = String(weekStartIso || "").slice(0, 10);
-		      const dateIso = String(selectedWorkout.date || "");
-		      const bg = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-bg") : null;
-		      const bubble = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-bubble") : null;
+		    // Swipe actions on the generated workout (tablet-first).
+		    const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
+			    if (swipeZone && selectedWorkout) {
+			      const pid = String(viewPersonId || this._activePersonId() || "");
+			      const wk = String(weekStartIso || "").slice(0, 10);
+			      const dateIso = String(selectedWorkout.date || "");
+			      const bg = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-bg") : null;
+			      const bubble = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-bubble") : null;
 		      const clearSwipeUI = () => {
 		        try {
 		          swipeZone.style.setProperty("--swipe-p", "0");
@@ -2494,7 +2622,33 @@ class WeeklyTrainingCard extends HTMLElement {
 		          if (bubble) bubble.textContent = "";
 		        } catch (_) {}
 		      };
-		      clearSwipeUI();
+			      clearSwipeUI();
+			      // Long-press opens the workout details popup (edit/delete).
+			      let lpTimer = 0;
+			      let lpStartX = 0;
+			      let lpStartY = 0;
+			      const lpClear = () => { if (lpTimer) window.clearTimeout(lpTimer); lpTimer = 0; };
+			      swipeZone.addEventListener("pointerdown", (e) => {
+			        try {
+			          lpClear();
+			          lpStartX = Number(e.clientX) || 0;
+			          lpStartY = Number(e.clientY) || 0;
+			          lpTimer = window.setTimeout(() => {
+			            lpTimer = 0;
+			            this._openEditWorkoutModal(pid, wk, selectedWorkout);
+			          }, 520);
+			        } catch (_) {}
+			      });
+			      swipeZone.addEventListener("pointermove", (e) => {
+			        try {
+			          if (!lpTimer) return;
+			          const dx = Math.abs((Number(e.clientX) || 0) - lpStartX);
+			          const dy = Math.abs((Number(e.clientY) || 0) - lpStartY);
+			          if (dx > 10 || dy > 10) lpClear();
+			        } catch (_) {}
+			      });
+			      swipeZone.addEventListener("pointerup", () => { lpClear(); });
+			      swipeZone.addEventListener("pointercancel", () => { lpClear(); });
 	      swipeZone.addEventListener("touchstart", (e) => {
 	        try {
 	          const t = e.touches && e.touches[0];
@@ -2562,8 +2716,48 @@ class WeeklyTrainingCard extends HTMLElement {
 		          clearSwipeUI();
 	        } catch (_) {}
 	      }, { passive: true });
-	      swipeZone.addEventListener("touchcancel", () => { clearSwipeUI(); }, { passive: true });
-	    }
+		      swipeZone.addEventListener("touchcancel", () => { clearSwipeUI(); }, { passive: true });
+		    }
+
+	    // Edit workout modal
+	    const qEwClose = this.shadowRoot ? this.shadowRoot.querySelector("#editw-close") : null;
+	    if (qEwClose) qEwClose.addEventListener("click", () => { this._ui.showEditWorkout = false; this._ui.editWorkout = null; this._render(); });
+	    const qEwCancel = this.shadowRoot ? this.shadowRoot.querySelector("#editw-cancel") : null;
+	    if (qEwCancel) qEwCancel.addEventListener("click", () => { this._ui.showEditWorkout = false; this._ui.editWorkout = null; this._render(); });
+	    const qEwBackdrop = this.shadowRoot ? this.shadowRoot.querySelector("#editw-backdrop") : null;
+	    if (qEwBackdrop) qEwBackdrop.addEventListener("click", (e) => {
+	      if (e.target && e.target.id === "editw-backdrop") { this._ui.showEditWorkout = false; this._ui.editWorkout = null; this._render(); }
+	    });
+	    const qEwName = this.shadowRoot ? this.shadowRoot.querySelector("#ew-name") : null;
+	    if (qEwName) qEwName.addEventListener("input", (e) => {
+	      if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
+	      this._ui.editWorkout.workout.name = String(e.target.value || "");
+	    });
+	    this.shadowRoot && this.shadowRoot.querySelectorAll("input[data-ew-sr]").forEach((el) => {
+	      el.addEventListener("input", (e) => {
+	        if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
+	        const idx = Number(e.currentTarget.getAttribute("data-ew-sr"));
+	        const items = this._ui.editWorkout.workout.items;
+	        if (!Array.isArray(items) || !Number.isFinite(idx) || !items[idx]) return;
+	        items[idx].sets_reps = String(e.target.value || "");
+	      });
+	    });
+	    this.shadowRoot && this.shadowRoot.querySelectorAll("input[data-ew-load]").forEach((el) => {
+	      el.addEventListener("input", (e) => {
+	        if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
+	        const idx = Number(e.currentTarget.getAttribute("data-ew-load"));
+	        const items = this._ui.editWorkout.workout.items;
+	        if (!Array.isArray(items) || !Number.isFinite(idx) || !items[idx]) return;
+	        const raw = String(e.target.value || "").trim();
+	        if (!raw) { delete items[idx].suggested_load; return; }
+	        const v = Number(raw);
+	        if (Number.isFinite(v)) items[idx].suggested_load = v;
+	      });
+	    });
+	    const qEwSave = this.shadowRoot ? this.shadowRoot.querySelector("#editw-save") : null;
+	    if (qEwSave) qEwSave.addEventListener("click", () => { this._saveEditedWorkout(); });
+	    const qEwDel = this.shadowRoot ? this.shadowRoot.querySelector("#editw-delete") : null;
+	    if (qEwDel) qEwDel.addEventListener("click", () => { this._deleteEditedWorkout(); });
 
 	    // Settings modal
     const qSettingsClose = this.shadowRoot ? this.shadowRoot.querySelector("#settings-close") : null;

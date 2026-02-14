@@ -190,3 +190,8 @@ All notable changes to this project will be documented in this file.
 - Cycle planning UX:
   - Move 4-week cycle planning out of Settings and into the main UI (empty workout panel).
   - Add a dedicated Cycle Planner modal and a one-click **bulk generator** for the next N weeks.
+
+## 0.3.2 - 2026-02-14
+
+- Workout details:
+  - Long-press the workout in the right panel to open a popup where you can **edit** or **delete** it.
