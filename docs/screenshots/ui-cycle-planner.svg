@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f3f4f6"/>
+      <stop offset="1" stop-color="#e5e7eb"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fafafa"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1400" height="900" fill="url(#bg)"/>
+
+  <!-- Backdrop -->
+  <rect x="0" y="0" width="1400" height="900" fill="#0f172a" opacity="0.12"/>
+
+  <!-- Modal -->
+  <rect x="250" y="180" width="900" height="520" rx="18" fill="url(#card)" stroke="#e5e7eb"/>
+
+  <text x="290" y="232" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="20" fill="#111827">Plan 4-week cycle</text>
+  <text x="290" y="262" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#6b7280">Generate the next 4 weeks starting from the currently selected week.</text>
+
+  <!-- Close -->
+  <rect x="1102" y="208" width="36" height="34" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1116" y="231" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">×</text>
+
+  <!-- Form row -->
+  <text x="290" y="308" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Person</text>
+  <rect x="290" y="318" width="250" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="308" y="346" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Nikolaj</text>
+  <text x="520" y="346" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#6b7280">▾</text>
+
+  <text x="570" y="308" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Preset</text>
+  <rect x="570" y="318" width="260" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="588" y="346" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Strength-ish</text>
+  <text x="810" y="346" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#6b7280">▾</text>
+
+  <text x="860" y="308" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Weeks</text>
+  <rect x="860" y="318" width="130" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="878" y="346" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">4</text>
+
+  <!-- Weekdays -->
+  <text x="290" y="404" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Training weekdays</text>
+  <text x="290" y="426" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#94a3b8">Select the days you want to train.</text>
+
+  <!-- Chips -->
+  <rect x="290" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#3b82f6"/>
+  <text x="306" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Man</text>
+  <rect x="354" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="372" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Tir</text>
+  <rect x="418" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#3b82f6"/>
+  <text x="434" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Ons</text>
+  <rect x="482" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="498" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Tor</text>
+  <rect x="546" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#3b82f6"/>
+  <text x="562" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Fre</text>
+  <rect x="610" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="628" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Lør</text>
+  <rect x="674" y="446" width="54" height="34" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="690" y="468" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Søn</text>
+
+  <!-- Progression -->
+  <line x1="290" y1="506" x2="1110" y2="506" stroke="#e5e7eb"/>
+
+  <text x="290" y="548" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Step % (week 2-3)</text>
+  <rect x="290" y="558" width="260" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="308" y="586" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">2.5</text>
+
+  <text x="570" y="548" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Deload % (week 4)</text>
+  <rect x="570" y="558" width="260" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="588" y="586" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">10</text>
+
+  <text x="850" y="548" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Deload volume</text>
+  <rect x="850" y="558" width="260" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="868" y="586" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">0.65</text>
+
+  <!-- Footer buttons -->
+  <rect x="660" y="628" width="150" height="44" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="708" y="656" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Cancel</text>
+
+  <rect x="822" y="628" width="170" height="44" rx="999" fill="#2563eb"/>
+  <text x="882" y="656" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#ffffff">Plan</text>
+
+  <rect x="490" y="628" width="160" height="44" rx="999" fill="#ffffff" stroke="#ef4444"/>
+  <text x="528" y="656" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#ef4444">Clear planned</text>
+</svg>
+

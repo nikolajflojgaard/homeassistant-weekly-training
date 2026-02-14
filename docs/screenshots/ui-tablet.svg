@@ -28,35 +28,51 @@
     <!-- Header -->
     <text x="18" y="34" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="20" fill="#111827">Ugeplan</text>
 
-    <!-- Week header (no arrows) -->
-    <rect x="18" y="46" width="220" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="32" y="68" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Week 7</text>
-    <text x="32" y="82" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">09.02 - 15.02</text>
+    <!-- Top row: week nav + people + settings -->
+    <!-- Week nav (clamped -1..+3) -->
+    <rect x="18" y="46" width="42" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="34" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">‹</text>
+    <rect x="66" y="46" width="172" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="80" y="68" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Week 8 (+1)</text>
+    <text x="80" y="82" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">16.02 - 22.02</text>
+    <rect x="244" y="46" width="42" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="259" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">›</text>
 
+    <!-- People bar (same row) -->
+    <rect x="298" y="46" width="804" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="316" y="70" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280" letter-spacing="0.08em">PEOPLE</text>
+
+    <!-- Active person chip -->
+    <rect x="392" y="54" width="112" height="24" rx="999" fill="#ffffff" stroke="#3b82f6"/>
+    <circle cx="414" cy="66" r="10" fill="#0ea5e9"/>
+    <text x="410" y="70" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#ffffff">N</text>
+    <text x="430" y="70" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Nikolaj</text>
+
+    <!-- Secondary person chip -->
+    <rect x="512" y="54" width="104" height="24" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <circle cx="534" cy="66" r="10" fill="#22c55e"/>
+    <text x="530" y="70" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#ffffff">J</text>
+    <text x="550" y="70" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Janice</text>
+
+    <rect x="624" y="54" width="34" height="24" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="637" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">+</text>
+
+    <!-- Settings -->
     <rect x="1120" y="46" width="42" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="1132" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">⛭</text>
-
-    <!-- People bar -->
-    <rect x="18" y="92" width="1144" height="44" rx="12" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="4 4"/>
-    <text x="34" y="120" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">People</text>
-    <circle cx="122" cy="114" r="11" fill="#475569"/>
-    <text x="118" y="118" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#ffffff">N</text>
-    <text x="140" y="118" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Nikolaj</text>
-    <circle cx="230" cy="114" r="11" fill="#64748b"/>
-    <text x="226" y="118" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#ffffff">J</text>
-    <text x="248" y="118" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Janice</text>
-    <rect x="1108" y="102" width="44" height="24" rx="999" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="1127" y="119" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">+</text>
+    <text x="1133" y="71" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">⛭</text>
 
     <!-- Layout: left day list -->
-    <g transform="translate(0,66)">
-    <rect x="18" y="84" width="300" height="506" rx="14" fill="#ffffff" stroke="#d1d5db"/>
+    <g transform="translate(0,22)">
+    <rect x="18" y="84" width="300" height="506" rx="14" fill="#ffffff" stroke="#e5e7eb"/>
+
+    <!-- Day cards (compact, same style as workout items) -->
+    <rect x="28" y="94" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="114" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Mandag</text>
     <text x="34" y="132" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">09.02 • Tap to add</text>
     <rect x="236" y="104" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
     <text x="250" y="119" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">Empty</text>
 
-    <rect x="18" y="146" width="300" height="64" fill="#ffffff"/>
+    <rect x="28" y="156" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="176" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Tirsdag</text>
     <text x="34" y="194" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">10.02 • Full Body A</text>
     <rect x="236" y="166" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
@@ -65,34 +81,34 @@
     <text x="250" y="203" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#475569">Nikolaj</text>
 
     <!-- Selected day highlight -->
-    <rect x="18" y="146" width="300" height="64" rx="0" fill="#f1f5f9" opacity="0.75"/>
-    <rect x="18" y="146" width="4" height="64" fill="#64748b"/>
+    <rect x="28" y="156" width="280" height="54" rx="14" fill="#ffffff" stroke="#3b82f6"/>
+    <rect x="28" y="156" width="4" height="54" rx="14" fill="#3b82f6"/>
 
-    <rect x="18" y="210" width="300" height="64" fill="#ffffff"/>
+    <rect x="28" y="218" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="240" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Onsdag</text>
     <text x="34" y="258" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">11.02 • Tap to add</text>
     <rect x="236" y="230" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
     <text x="250" y="245" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">Empty</text>
 
-    <rect x="18" y="274" width="300" height="64" fill="#ffffff"/>
+    <rect x="28" y="280" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="304" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Torsdag</text>
     <text x="34" y="322" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">12.02 • Tap to add</text>
     <rect x="236" y="294" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
     <text x="250" y="309" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">Empty</text>
 
-    <rect x="18" y="338" width="300" height="64" fill="#ffffff"/>
+    <rect x="28" y="342" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="368" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Fredag</text>
     <text x="34" y="386" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">13.02 • Tap to add</text>
     <rect x="236" y="358" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
     <text x="250" y="373" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#6b7280">Empty</text>
 
-    <rect x="18" y="402" width="300" height="64" fill="#ffffff"/>
+    <rect x="28" y="404" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="432" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Lørdag</text>
     <text x="34" y="450" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">14.02 • Tap to add</text>
     <rect x="232" y="422" width="72" height="20" rx="999" fill="#ffffff" stroke="#3b82f6"/>
     <text x="246" y="437" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="11" fill="#3b82f6">TODAY</text>
 
-    <rect x="18" y="466" width="300" height="64" fill="#ffffff"/>
+    <rect x="28" y="466" width="280" height="54" rx="14" fill="#f8fafc" stroke="#e5e7eb"/>
     <text x="34" y="496" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">Søndag</text>
     <text x="34" y="514" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">15.02 • Tap to add</text>
     <rect x="236" y="486" width="64" height="20" rx="999" fill="#ffffff" stroke="#d1d5db"/>
