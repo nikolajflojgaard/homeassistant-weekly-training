@@ -120,6 +120,37 @@ def _slot_for_weekday(weekday: int) -> str:
         return "B"
     return "C"
 
+
+def _cycle_slot_for_day(
+    *,
+    start_week_start: date | None,
+    week_start_day: date,
+    weekday: int,
+    training_weekdays: list[int],
+) -> str | None:
+    """Return A/B/C rotation slot for a cycle day.
+
+    Rotation is based on the *ordered training weekdays* and continues across weeks.
+    This means:
+    - 3 days/week => A/B/C each week
+    - 2 days/week => A/B, then C/A next week, etc.
+    """
+    if start_week_start is None:
+        return None
+    if not training_weekdays:
+        return None
+    if weekday not in training_weekdays:
+        return None
+    try:
+        delta_weeks = int(round((week_start_day - start_week_start).days / 7))
+        if delta_weeks < 0:
+            return None
+        idx_in_week = training_weekdays.index(int(weekday))
+        seq = delta_weeks * len(training_weekdays) + idx_in_week
+        return ["A", "B", "C"][seq % 3]
+    except Exception:  # noqa: BLE001
+        return None
+
 def _render_markdown(*, week_number: int, week_start: str, plan: dict[str, Any]) -> str:
     workouts = plan.get("workouts", [])
     if not isinstance(workouts, list):
@@ -348,38 +379,152 @@ def generate_session(
     disallow_deadlift = {"deadlift", "hinge"}
     disallow_squat = {"squat"}
 
-    slot = _slot_for_weekday(int(weekday))
+    # Cycle uses A/B/C rotation across chosen training weekdays.
+    training_weekdays: list[int] = []
+    if isinstance(cycle_cfg, dict):
+        tw = cycle_cfg.get("training_weekdays")
+        if isinstance(tw, list):
+            cleaned: list[int] = []
+            for x in tw:
+                try:
+                    xi = int(x)
+                except Exception:  # noqa: BLE001
+                    continue
+                if 0 <= xi <= 6 and xi not in cleaned:
+                    cleaned.append(xi)
+            cleaned.sort()
+            training_weekdays = cleaned
+
+    slot = _cycle_slot_for_day(
+        start_week_start=start_week_start if cycle_enabled else None,
+        week_start_day=week_start_day,
+        weekday=int(weekday),
+        training_weekdays=training_weekdays,
+    ) or _slot_for_weekday(int(weekday))
     slot_key = slot.lower()
 
+    by_name_lc = {str(k or "").strip().lower(): v for k, v in by_name.items() if str(k or "").strip()}
+
+    def _pick_named_or_tags(
+        *,
+        names: list[str],
+        tags_any: set[str],
+        fallback_tags_any: set[str],
+        disallow_tags: set[str] | None = None,
+    ) -> dict[str, Any]:
+        # Prefer exact exercise names if available (keeps templates stable).
+        for nm in names:
+            ex = by_name_lc.get(str(nm or "").strip().lower())
+            if not isinstance(ex, dict):
+                continue
+            ex_name = str(ex.get("name") or "").strip().lower()
+            if ex_name and ex_name in disabled:
+                continue
+            if disallow_tags and not tags_for(str(ex.get("name") or "")).isdisjoint(disallow_tags):
+                continue
+            if _matches_preferences(ex, ctx):
+                return ex
+        return _pick_one(library, tags_any=tags_any, ctx=ctx, fallback_tags_any=fallback_tags_any)
+
+    def _apply_deload_sr(sr: str) -> str:
+        if not is_deload:
+            return sr
+        s, r = _parse_sets_reps(sr)
+        s = max(1, int(round(s * float(deload_volume))))
+        return _format_sets_reps(s, r)
+
     # Lower: A/B are main lower, C is more single-leg by default.
-    if slot == "C":
-        lower = _manual_or_pick(f"{slot_key}_lower", tags_any={"lunge", "single_leg"}, fallback_tags_any={"leg"})
-    else:
-        if lower_family == "squat":
-            lower = _manual_or_pick(
-                f"{slot_key}_lower",
-                tags_any={"squat"},
-                fallback_tags_any={"leg"},
-                disallow_tags=disallow_deadlift,
-            )
+    use_strength_abc = cycle_enabled and cycle_preset == "strength" and (slot in {"A", "B", "C"}) and (int(weekday) in training_weekdays) and planning_mode != "manual"
+
+    lower = {}
+    push = {}
+    pull = {}
+    accessory = {}
+    core = {}
+    items_spec: list[tuple[str, dict[str, Any], str]] | None = None
+
+    if use_strength_abc:
+        # Strength-ish: A/B/C templates (no squat+deadlift in same session; bench can pair).
+        if slot == "A":
+            lower = _pick_named_or_tags(names=["Back Squat", "Squat"], tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
+            push = _pick_named_or_tags(names=["Bench Press", "Barbell Bench Press"], tags_any={"bench", "press", "push"}, fallback_tags_any={"push"})
+            pull = _pick_named_or_tags(names=["Barbell Row", "Bent-Over Row", "Row"], tags_any={"row"}, fallback_tags_any={"pull"})
+            core = _pick_named_or_tags(names=["Hanging Leg Raise", "Leg Raise"], tags_any={"core"}, fallback_tags_any={"core"})
+            items_spec = [
+                ("main_lower", lower, _apply_deload_sr("4 x 5")),
+                ("main_push", push, _apply_deload_sr("4 x 5")),
+                ("accessory", pull, _apply_deload_sr("3 x 8")),
+                ("core", core, _apply_deload_sr("3 x 10")),
+            ]
+        elif slot == "B":
+            lower = _pick_named_or_tags(names=["Deadlift", "Conventional Deadlift"], tags_any={"deadlift", "hinge"}, fallback_tags_any={"hinge"}, disallow_tags=disallow_squat)
+            accessory = _pick_named_or_tags(names=["Dumbbell Shoulder Press", "DB Shoulder Press", "Overhead Press"], tags_any={"shoulders", "press", "push"}, fallback_tags_any={"shoulders"})
+            pull = _pick_named_or_tags(names=["Pull-Up", "Pull-ups", "Pull Up", "Chin-Up"], tags_any={"pullup", "pull"}, fallback_tags_any={"pull"})
+            core = _pick_named_or_tags(names=["Plank"], tags_any={"core"}, fallback_tags_any={"core"})
+            items_spec = [
+                ("main_lower", lower, _apply_deload_sr("4 x 4")),
+                ("accessory", accessory, _apply_deload_sr("3 x 10")),
+                ("accessory_2", pull, _apply_deload_sr("3 x 6")),
+                ("core", core, _apply_deload_sr("3 x 45")),
+            ]
         else:
-            lower = _manual_or_pick(
-                f"{slot_key}_lower",
-                tags_any={"deadlift", "hinge"},
-                fallback_tags_any={"hinge"},
-                disallow_tags=disallow_squat,
+            # C
+            lower = _pick_named_or_tags(names=["Back Squat", "Squat"], tags_any={"squat"}, fallback_tags_any={"leg"}, disallow_tags=disallow_deadlift)
+            push = _pick_named_or_tags(
+                names=["Close-Grip Bench Press", "Close Grip Bench Press", "Close-Grip Bench", "Bench Press"],
+                tags_any={"bench", "press", "push"},
+                fallback_tags_any={"push"},
             )
+            pull = _pick_named_or_tags(names=["Dumbbell Row", "DB Row", "Row"], tags_any={"row", "pull"}, fallback_tags_any={"pull"})
+            accessory = _pick_named_or_tags(names=["Hammer Curl", "Dumbbell Hammer Curl", "Curl"], tags_any={"arms"}, fallback_tags_any={"arms"})
+            core = _pick_named_or_tags(names=["Ab Wheel Rollout", "Ab Wheel", "Rollout"], tags_any={"core"}, fallback_tags_any={"core"})
+            items_spec = [
+                ("main_lower", lower, _apply_deload_sr("3 x 6")),
+                ("main_push", push, _apply_deload_sr("3 x 8")),
+                ("accessory", pull, _apply_deload_sr("3 x 10")),
+                ("accessory_2", accessory, _apply_deload_sr("3 x 10")),
+                ("core", core, _apply_deload_sr("3 x 8")),
+            ]
+    else:
+        # Default generator behavior (auto or manual per-slot picking).
+        if slot == "C":
+            lower = _manual_or_pick(f"{slot_key}_lower", tags_any={"lunge", "single_leg"}, fallback_tags_any={"leg"})
+        else:
+            if lower_family == "squat":
+                lower = _manual_or_pick(
+                    f"{slot_key}_lower",
+                    tags_any={"squat"},
+                    fallback_tags_any={"leg"},
+                    disallow_tags=disallow_deadlift,
+                )
+            else:
+                lower = _manual_or_pick(
+                    f"{slot_key}_lower",
+                    tags_any={"deadlift", "hinge"},
+                    fallback_tags_any={"hinge"},
+                    disallow_tags=disallow_squat,
+                )
 
-    push = _manual_or_pick(f"{slot_key}_push", tags_any={"bench", "push", "press"}, fallback_tags_any={"push"})
-    pull = _manual_or_pick(f"{slot_key}_pull", tags_any={"row", "pull", "pullup"}, fallback_tags_any={"pull"})
+        push = _manual_or_pick(f"{slot_key}_push", tags_any={"bench", "push", "press"}, fallback_tags_any={"push"})
+        pull = _manual_or_pick(f"{slot_key}_pull", tags_any={"row", "pull", "pullup"}, fallback_tags_any={"pull"})
 
-    accessory = _pick_one(library, tags_any={"shoulders", "rear_delt"}, ctx=ctx, fallback_tags_any={"shoulders"})
-    core = _pick_one(library, tags_any={"core"}, ctx=ctx, fallback_tags_any={"core"})
+        accessory = _pick_one(library, tags_any={"shoulders", "rear_delt"}, ctx=ctx, fallback_tags_any={"shoulders"})
+        core = _pick_one(library, tags_any={"core"}, ctx=ctx, fallback_tags_any={"core"})
 
-    # Duration hint: scale number of accessories.
-    extra_accessory = None
-    if duration >= 60:
-        extra_accessory = _pick_one(library, tags_any={"arms"}, ctx=ctx, fallback_tags_any={"arms"})
+        # Duration hint: scale number of accessories.
+        extra_accessory = None
+        if duration >= 60:
+            extra_accessory = _pick_one(library, tags_any={"arms"}, ctx=ctx, fallback_tags_any={"arms"})
+
+        items_spec = [
+            ("main_lower", lower, main_reps),
+            ("main_push", push, main_reps),
+            ("main_pull", pull, main_reps),
+            ("accessory", accessory, accessory_reps),
+            ("core", core, core_reps),
+        ]
+        if extra_accessory:
+            items_spec.insert(4, ("accessory_2", extra_accessory, accessory_reps))
 
     def _round_load(value: float) -> float:
         inc = 2.5 if units == "kg" else 5.0
@@ -447,18 +592,14 @@ def generate_session(
             item["units"] = units
         return item
 
-    items = [
-        _item("main_lower", str(lower.get("name") or ""), main_reps),
-        _item("main_push", str(push.get("name") or ""), main_reps),
-        _item("main_pull", str(pull.get("name") or ""), main_reps),
-        _item("accessory", str(accessory.get("name") or ""), accessory_reps),
-        _item("core", str(core.get("name") or ""), core_reps),
-    ]
-    if extra_accessory:
-        items.insert(4, _item("accessory_2", str(extra_accessory.get("name") or ""), accessory_reps))
+    # Build item list (template-specific or default).
+    items: list[dict[str, Any]] = []
+    for kind, ex, sr in (items_spec or []):
+        items.append(_item(kind, str((ex or {}).get("name") or ""), sr))
 
+    workout_name = f"Dag {slot}" if (cycle_enabled and int(weekday) in training_weekdays and slot in {"A", "B", "C"}) else f"Full Body {slot}"
     workout = {
-        "name": f"Full Body {slot}",
+        "name": workout_name,
         "date": session_date_iso,
         "weekday": int(weekday),
         "intensity": intensity,

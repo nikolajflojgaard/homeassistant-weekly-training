@@ -233,3 +233,7 @@ All notable changes to this project will be documented in this file.
 ## 0.3.10 - 2026-02-14
 
 - UX: left day list is now navigation-only (selects which day is shown on the right). Workout creation is only available from the right panel.
+
+## 0.3.11 - 2026-02-14
+
+- Cycle (Strength-ish): planned workouts now follow an **A/B/C rotation** (instead of repeating the same day template), matching a more realistic weekly program structure.
