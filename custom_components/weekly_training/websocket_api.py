@@ -16,6 +16,22 @@ from .const import DOMAIN
 from .ws_state import public_state
 
 
+def _runtime_payload() -> dict[str, Any]:
+    """Compute UI runtime values (week start + week number + today) with 01:00 rollover."""
+    now = dt_util.as_local(dt_util.utcnow())
+    today = now.date()
+    # Week rollover is intentionally delayed until Monday 01:00 (local time).
+    if now.weekday() == 0 and now.hour < 1:
+        today = today - timedelta(days=1)
+    current_week_start = (today - timedelta(days=today.weekday())).isoformat()
+    current_week_number = int(today.isocalendar().week)
+    return {
+        "today": today.isoformat(),
+        "current_week_start": current_week_start,
+        "current_week_number": current_week_number,
+    }
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "weekly_training/get_library",
@@ -98,25 +114,13 @@ async def ws_get_state(
         connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
         return
     state = await coordinator.store.async_load()
-    # Week rollover is intentionally delayed until Monday 01:00 (local time).
-    now = dt_util.as_local(dt_util.utcnow())
-    today = now.date()
-    if now.weekday() == 0 and now.hour < 1:
-        today = today - timedelta(days=1)
-    current_week_start = (today - timedelta(days=today.weekday())).isoformat()
-    current_week_number = int(today.isocalendar().week)
-
     connection.send_result(
         msg["id"],
         {
             "entry_id": entry_id,
             "state": public_state(
                 state,
-                runtime={
-                    "today": today.isoformat(),
-                    "current_week_start": current_week_start,
-                    "current_week_number": current_week_number,
-                },
+                runtime=_runtime_payload(),
             ),
         },
     )
@@ -150,7 +154,7 @@ async def ws_set_workout_completed(
         completed=bool(msg["completed"]),
     )
     await coordinator.async_request_refresh()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 @websocket_api.websocket_command(
@@ -179,7 +183,7 @@ async def ws_delete_workout(
         date_iso=str(msg["date"]),
     )
     await coordinator.async_request_refresh()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 @websocket_api.websocket_command(
@@ -202,7 +206,7 @@ async def ws_set_active_person(
         return
     state = await coordinator.store.async_set_active_person(str(msg["person_id"]))
     await coordinator.async_request_refresh()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 @websocket_api.websocket_command(
@@ -242,7 +246,7 @@ async def ws_set_overrides(
             custom_exercises=cfg.get("custom_exercises") if isinstance(cfg.get("custom_exercises"), list) else None,
         )
     await coordinator.async_request_refresh()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 @websocket_api.websocket_command(
@@ -268,7 +272,7 @@ async def ws_add_person(
         person = {}
     state = await coordinator.store.async_upsert_person(person)
     await coordinator.async_request_refresh()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 @websocket_api.websocket_command(
@@ -291,7 +295,7 @@ async def ws_delete_person(
         return
     state = await coordinator.store.async_delete_person(str(msg["person_id"]))
     await coordinator.async_request_refresh()
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 @websocket_api.websocket_command(
@@ -342,7 +346,7 @@ async def ws_generate_plan(
     if person_id is not None:
         person_id = str(person_id)
     state = await coordinator.async_generate_for_day(person_id=person_id)
-    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state)})
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
 
 def async_register(hass: HomeAssistant) -> None:

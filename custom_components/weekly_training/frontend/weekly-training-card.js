@@ -115,6 +115,15 @@ class WeeklyTrainingCard extends HTMLElement {
     return await this._hass.callWS(payload);
   }
 
+  _applyState(nextState) {
+    if (!nextState || typeof nextState !== "object") return;
+    // Some WS responses may omit runtime; keep last known runtime to avoid UI flicker.
+    const prevRt = this._state && this._state.runtime ? this._state.runtime : null;
+    if (!nextState.runtime && prevRt) nextState.runtime = prevRt;
+    this._state = nextState;
+    this._applyStateToDraft();
+  }
+
   _captureFocus() {
     const el = this.shadowRoot ? this.shadowRoot.activeElement : null;
     if (!el) return;
@@ -159,8 +168,7 @@ class WeeklyTrainingCard extends HTMLElement {
       }
       if (!this._entryId) throw new Error("Set entry_id in card config (or keep only one entry).");
       const res = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId });
-      this._state = (res && res.state) || {};
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || {});
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -259,8 +267,7 @@ class WeeklyTrainingCard extends HTMLElement {
         },
       };
       const res = await this._callWS(payload);
-      this._state = (res && res.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -276,8 +283,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._render();
     try {
       const res = await this._callWS({ type: "weekly_training/set_active_person", entry_id: this._entryId, person_id: String(personId || "") });
-      this._state = (res && res.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -299,8 +305,7 @@ class WeeklyTrainingCard extends HTMLElement {
         date: String(dateIso || ""),
         completed: Boolean(completed),
       });
-      this._state = (res && res.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -321,8 +326,7 @@ class WeeklyTrainingCard extends HTMLElement {
         week_start: String(weekStart || ""),
         date: String(dateIso || ""),
       });
-      this._state = (res && res.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -343,8 +347,7 @@ class WeeklyTrainingCard extends HTMLElement {
       await this._callWS({ type: "weekly_training/generate_plan", entry_id: this._entryId, ...(pid ? { person_id: pid } : {}) });
       // Refresh state after generation
       const st = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId });
-      this._state = (st && st.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((st && st.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -381,11 +384,10 @@ class WeeklyTrainingCard extends HTMLElement {
           },
         },
       });
-      this._state = (res && res.state) || this._state;
+      this._applyState((res && res.state) || this._state);
       this._newPerson.name = "";
       this._ui.editPersonId = "";
       this._ui.showPeople = false;
-      this._applyStateToDraft();
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {
@@ -530,8 +532,7 @@ class WeeklyTrainingCard extends HTMLElement {
           },
         },
       });
-      this._state = (res && res.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || this._state);
       this._ui.showSettings = false;
       this._settingsDraft = null;
     } catch (e) {
@@ -551,8 +552,7 @@ class WeeklyTrainingCard extends HTMLElement {
     this._render();
     try {
       const res = await this._callWS({ type: "weekly_training/delete_person", entry_id: this._entryId, person_id: pid });
-      this._state = (res && res.state) || this._state;
-      this._applyStateToDraft();
+      this._applyState((res && res.state) || this._state);
     } catch (e) {
       this._error = String((e && e.message) || e);
     } finally {

@@ -78,3 +78,8 @@ All notable changes to this project will be documented in this file.
   - Completed bar at the bottom shows all completed workouts for the current week across all people
 - Automation:
   - Previous week is cleared automatically at **Monday 01:00** (local time)
+
+## 0.1.10 - 2026-02-14
+
+- Fix: calendar runtime (`today`, `current_week_start`, week number) is now included on all websocket state updates.
+  - Prevents TODAY marker and dates from changing/disappearing when switching active person or toggling completed/delete.
