@@ -19,68 +19,102 @@
   <!-- App bar -->
   <rect x="95" y="80" width="1210" height="64" rx="22" fill="#ffffff"/>
   <text x="130" y="122" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="22" fill="#111827">Weekly Training</text>
-  <text x="320" y="122" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#6b7280">Tablet view (responsive)</text>
+  <text x="320" y="122" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#6b7280">Tablet view (weekly canvas)</text>
 
   <!-- Main content grid (2 columns) -->
   <g transform="translate(115,165)">
-    <!-- Left column -->
-    <rect x="0" y="0" width="560" height="610" rx="16" fill="url(#card)" stroke="#e5e7eb"/>
-    <text x="18" y="34" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">Weekly Training</text>
+    <!-- Left column: people + week canvas -->
+    <rect x="0" y="0" width="560" height="270" rx="16" fill="url(#card)" stroke="#e5e7eb"/>
+    <text x="18" y="34" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">People</text>
 
-    <!-- Top row controls -->
-    <text x="18" y="74" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Person</text>
-    <rect x="18" y="84" width="170" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="30" y="109" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">You</text>
+    <text x="18" y="62" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Active person</text>
+    <rect x="18" y="72" width="400" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="30" y="97" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">You</text>
+    <rect x="432" y="72" width="110" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="462" y="97" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Delete</text>
 
-    <text x="208" y="74" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Planning mode</text>
-    <rect x="208" y="84" width="170" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="220" y="109" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Auto</text>
+    <text x="18" y="136" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Add person</text>
 
-    <text x="398" y="74" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Session minutes</text>
-    <rect x="398" y="84" width="144" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="410" y="109" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">45</text>
+    <text x="18" y="164" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Name</text>
+    <rect x="18" y="174" width="250" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="30" y="199" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#9ca3af">Alex</text>
 
-    <!-- Preferred -->
-    <text x="18" y="152" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Preferred exercises/tags (CSV)</text>
-    <rect x="18" y="162" width="524" height="110" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="30" y="192" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono" font-size="13" fill="#111827">squat, pullup, overhead_press</text>
+    <text x="288" y="164" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Gender</text>
+    <rect x="288" y="174" width="254" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="300" y="199" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Male</text>
+
+    <text x="18" y="228" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">SQ / DL / BP 1RM (kg)</text>
+    <rect x="18" y="238" width="150" height="32" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="30" y="260" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">120</text>
+    <rect x="188" y="238" width="150" height="32" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="200" y="260" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">160</text>
+    <rect x="358" y="238" width="150" height="32" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="370" y="260" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#111827">100</text>
+    <rect x="510" y="238" width="32" height="32" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="520" y="260" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">+</text>
+
+    <rect x="0" y="290" width="560" height="360" rx="16" fill="url(#card)" stroke="#e5e7eb"/>
+    <text x="18" y="324" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">Week canvas</text>
+
+    <!-- Week bar + day selector -->
+    <rect x="18" y="340" width="524" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <rect x="28" y="347" width="34" height="30" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="40" y="368" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">&lt;</text>
+    <rect x="70" y="347" width="110" height="30" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="96" y="368" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="13" fill="#6b7280">Week 7</text>
+    <rect x="188" y="347" width="34" height="30" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="200" y="368" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">&gt;</text>
+    <text x="238" y="368" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Pick day, then Generate</text>
+
+    <rect x="18" y="396" width="524" height="44" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <!-- Day pills -->
+    <rect x="28" y="404" width="60" height="28" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="45" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Mon</text>
+    <rect x="94" y="404" width="60" height="28" rx="999" fill="#e0f2fe" stroke="#03a9f4"/>
+    <text x="113" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Tue</text>
+    <rect x="160" y="404" width="60" height="28" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="178" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Wed</text>
+    <rect x="226" y="404" width="60" height="28" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="244" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Thu</text>
+    <rect x="292" y="404" width="60" height="28" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="312" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Fri</text>
+    <rect x="358" y="404" width="60" height="28" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="377" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Sat</text>
+    <rect x="424" y="404" width="60" height="28" rx="999" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="444" y="423" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#111827">Sun</text>
+
+    <!-- Settings row -->
+    <text x="18" y="470" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Planning mode</text>
+    <rect x="18" y="480" width="200" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="30" y="505" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Auto</text>
+
+    <text x="236" y="470" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Session minutes</text>
+    <rect x="236" y="480" width="140" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="248" y="505" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">45</text>
+
+    <text x="392" y="470" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Person</text>
+    <rect x="392" y="480" width="150" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="404" y="505" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">You</text>
+
+    <text x="18" y="540" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Preferred exercises/tags (CSV)</text>
+    <rect x="18" y="550" width="524" height="48" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="30" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono" font-size="13" fill="#111827">squat, pullup, overhead_press</text>
 
     <!-- Actions -->
-    <rect x="18" y="290" width="190" height="40" rx="12" fill="#03a9f4"/>
-    <text x="38" y="316" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#ffffff">Generate weekly plan</text>
-    <rect x="220" y="290" width="140" height="40" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="265" y="316" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Save</text>
-    <rect x="372" y="290" width="170" height="40" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="430" y="316" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Reload</text>
-
-    <!-- Add person card -->
-    <rect x="0" y="350" width="560" height="260" rx="16" fill="url(#card)" stroke="#e5e7eb"/>
-    <text x="18" y="384" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Add person</text>
-
-    <text x="18" y="420" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Name</text>
-    <rect x="18" y="430" width="250" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="30" y="455" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#9ca3af">Alex</text>
-
-    <text x="288" y="420" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Gender</text>
-    <rect x="288" y="430" width="254" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="300" y="455" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Male</text>
-
-    <text x="18" y="500" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">SQ / DL / BP 1RM (kg)</text>
-    <rect x="18" y="510" width="150" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="30" y="535" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">120</text>
-    <rect x="188" y="510" width="150" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="200" y="535" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">160</text>
-    <rect x="358" y="510" width="150" height="38" rx="10" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="370" y="535" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">100</text>
-
-    <rect x="18" y="560" width="120" height="38" rx="12" fill="#ffffff" stroke="#d1d5db"/>
-    <text x="58" y="585" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Add</text>
+    <rect x="18" y="610" width="190" height="40" rx="12" fill="#03a9f4"/>
+    <text x="38" y="636" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#ffffff">Generate session</text>
+    <rect x="220" y="610" width="140" height="40" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="265" y="636" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Save</text>
+    <rect x="372" y="610" width="170" height="40" rx="12" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="430" y="636" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="14" fill="#111827">Reload</text>
 
     <!-- Right column: plan -->
     <rect x="590" y="0" width="560" height="610" rx="16" fill="url(#card)" stroke="#e5e7eb"/>
-    <text x="608" y="34" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">Latest plan</text>
+    <text x="608" y="34" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="16" fill="#111827">Week plan</text>
     <rect x="608" y="54" width="110" height="26" rx="999" fill="#ffffff" stroke="#d1d5db"/>
     <text x="634" y="73" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Week 7</text>
+    <text x="740" y="72" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Person: You</text>
+    <text x="860" y="72" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="12" fill="#6b7280">Day: Tue</text>
 
     <rect x="608" y="94" width="524" height="496" rx="14" fill="#f3f4f6" stroke="#e5e7eb"/>
     <text x="628" y="130" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono" font-size="12" fill="#111827"># Weekly Training Plan (ISO week 7)</text>
@@ -92,4 +126,3 @@
     <text x="628" y="260" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono" font-size="12" fill="#6b7280">…</text>
   </g>
 </svg>
-

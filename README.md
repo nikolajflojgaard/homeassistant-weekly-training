@@ -1,6 +1,6 @@
 # Weekly Training (Home Assistant)
 
-Weekly Training is a HACS-installable custom integration that generates a **full body strength plan** for the current week.
+Weekly Training is a HACS-installable custom integration that generates **full body strength sessions** for a selected day, stored per **ISO week**.
 
 It is designed for **tablet dashboards** (responsive down to mobile) and uses a HA-style custom card.
 
@@ -8,7 +8,9 @@ It is designed for **tablet dashboards** (responsive down to mobile) and uses a 
 
 - People profiles (male/female), per-person defaults and 1RM maxes:
   - Squat (SQ), Deadlift (DL), Bench Press (BP)
-- Generate a 3-day full body plan via a button
+- Weekly canvas:
+  - Pick `Week X` and a weekday, then generate that day's session
+  - New week starts blank (generate again)
 - Choose planning mode:
   - `Auto`: let the generator pick exercises
   - `Manual`: pick exercises per session
@@ -40,7 +42,7 @@ Example full view YAML is in `docs/lovelace_tablet_view.yaml`.
 
 ## Screenshots
 
-Tablet (2-column layout):
+Tablet (2-column layout, Week + day selector):
 
 ![Weekly Training Tablet UI](docs/screenshots/ui-tablet.svg)
 

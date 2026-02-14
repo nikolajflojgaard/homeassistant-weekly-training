@@ -23,4 +23,13 @@ sections:
           - entity: select.weekly_training_planning_mode
           - entity: number.weekly_training_session_minutes
           - entity: text.weekly_training_preferred_exercises
-
+          # Optional: manual per-session overrides (only used when planning_mode=manual)
+          - entity: select.weekly_training_session_a_lower
+          - entity: select.weekly_training_session_a_push
+          - entity: select.weekly_training_session_a_pull
+          - entity: select.weekly_training_session_b_lower
+          - entity: select.weekly_training_session_b_push
+          - entity: select.weekly_training_session_b_pull
+          - entity: select.weekly_training_session_c_lower
+          - entity: select.weekly_training_session_c_push
+          - entity: select.weekly_training_session_c_pull
