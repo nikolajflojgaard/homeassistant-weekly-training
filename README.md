@@ -38,6 +38,16 @@ If you have multiple entries, set `entry_id`.
 
 Example full view YAML is in `docs/lovelace_tablet_view.yaml`.
 
+## Screenshots
+
+Tablet (2-column layout):
+
+![Weekly Training Tablet UI](docs/screenshots/ui-tablet.svg)
+
+Mobile (single column):
+
+![Weekly Training Mobile UI](docs/screenshots/ui-mobile.svg)
+
 ## Entities You Get
 
 - `button.weekly_training_generate_weekly_plan`
