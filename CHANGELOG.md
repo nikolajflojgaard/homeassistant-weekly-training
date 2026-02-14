@@ -151,3 +151,8 @@ All notable changes to this project will be documented in this file.
   - Header is now single-line: Week + People + Settings.
   - Modals: action buttons are pinned to the bottom (with a red Delete button where relevant).
   - Subtle elevation/gradients for a more premium HA-native look.
+
+## 0.2.5 - 2026-02-14
+
+- Fix: saving Exercise settings (adding custom exercises) no longer triggers `expected_rev` conflicts.
+- UI: modal footer/buttons adjusted to better match native Home Assistant styling (Delete stays red).

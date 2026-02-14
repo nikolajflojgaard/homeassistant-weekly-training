@@ -253,32 +253,60 @@ async def ws_set_overrides(
     raw = msg.get("overrides") or {}
     if not isinstance(raw, dict):
         raw = {}
-    try:
-        state = await coordinator.store.async_set_overrides(
-            week_offset=raw.get("week_offset"),
-            selected_weekday=raw.get("selected_weekday"),
-            duration_minutes=raw.get("duration_minutes"),
-            preferred_exercises=raw.get("preferred_exercises"),
-            planning_mode=raw.get("planning_mode"),
-            intensity=raw.get("intensity"),
-            session_overrides=raw.get("session_overrides") if isinstance(raw.get("session_overrides"), dict) else None,
-            expected_rev=msg.get("expected_rev"),
+    expected_rev = msg.get("expected_rev")
+    has_override_fields = any(
+        k in raw
+        for k in (
+            "week_offset",
+            "selected_weekday",
+            "duration_minutes",
+            "preferred_exercises",
+            "planning_mode",
+            "intensity",
+            "session_overrides",
         )
-    except ConflictError as e:
-        connection.send_error(msg["id"], "conflict", str(e))
-        return
-    # Optional: exercise config updates piggybacked here (UI convenience).
-    if "exercise_config" in raw and isinstance(raw.get("exercise_config"), dict):
+    )
+
+    # If this is only an exercise config update, avoid bumping rev twice (and avoid conflicts).
+    if not has_override_fields and "exercise_config" in raw and isinstance(raw.get("exercise_config"), dict):
         cfg = raw.get("exercise_config") or {}
         try:
             state = await coordinator.store.async_set_exercise_config(
                 disabled_exercises=cfg.get("disabled_exercises") if isinstance(cfg.get("disabled_exercises"), list) else None,
                 custom_exercises=cfg.get("custom_exercises") if isinstance(cfg.get("custom_exercises"), list) else None,
-                expected_rev=msg.get("expected_rev"),
+                expected_rev=expected_rev,
             )
         except ConflictError as e:
             connection.send_error(msg["id"], "conflict", str(e))
             return
+    else:
+        try:
+            state = await coordinator.store.async_set_overrides(
+                week_offset=raw.get("week_offset"),
+                selected_weekday=raw.get("selected_weekday"),
+                duration_minutes=raw.get("duration_minutes"),
+                preferred_exercises=raw.get("preferred_exercises"),
+                planning_mode=raw.get("planning_mode"),
+                intensity=raw.get("intensity"),
+                session_overrides=raw.get("session_overrides") if isinstance(raw.get("session_overrides"), dict) else None,
+                expected_rev=expected_rev,
+            )
+        except ConflictError as e:
+            connection.send_error(msg["id"], "conflict", str(e))
+            return
+        # Optional: exercise config updates piggybacked here (UI convenience).
+        if "exercise_config" in raw and isinstance(raw.get("exercise_config"), dict):
+            cfg = raw.get("exercise_config") or {}
+            try:
+                # Do not re-check expected_rev after we have already saved overrides.
+                state = await coordinator.store.async_set_exercise_config(
+                    disabled_exercises=cfg.get("disabled_exercises") if isinstance(cfg.get("disabled_exercises"), list) else None,
+                    custom_exercises=cfg.get("custom_exercises") if isinstance(cfg.get("custom_exercises"), list) else None,
+                    expected_rev=None,
+                )
+            except ConflictError as e:
+                connection.send_error(msg["id"], "conflict", str(e))
+                return
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 

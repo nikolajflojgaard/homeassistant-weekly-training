@@ -630,6 +630,13 @@ class WeeklyTrainingCard extends HTMLElement {
       this._ui.showSettings = false;
       this._settingsDraft = null;
     } catch (e) {
+      const code = String((e && e.code) || "");
+      if (code === "conflict") {
+        // No need to scare the user; just reload and keep the modal open.
+        await this._reloadState();
+        this._showToast("Reloaded", "", null);
+        return;
+      }
       this._error = String((e && e.message) || e);
     } finally {
       this._saving = false;
@@ -1210,10 +1217,9 @@ class WeeklyTrainingCard extends HTMLElement {
 		        .weekpill {
 		          border: 1px solid var(--wt-border);
 		          border-radius: var(--wt-radius-sm);
-		          background: linear-gradient(180deg, rgba(var(--rgb-primary-text-color, 0,0,0), 0.02), transparent), var(--wt-surface);
+		          background: var(--wt-surface);
 		          padding: 10px 12px;
 		          min-width: 190px;
-		          box-shadow: 0 1px 0 rgba(0,0,0,0.02);
 		        }
 	        .wk { font-size: 13px; font-weight: 800; line-height: 1.1; }
 	        .range { font-size: 12px; color: var(--wt-text2); margin-top: 3px; }
@@ -1245,7 +1251,7 @@ class WeeklyTrainingCard extends HTMLElement {
 			          align-items:center;
 			          justify-content:flex-start;
 			          gap: 10px;
-			          background: linear-gradient(180deg, var(--wt-surface), rgba(var(--rgb-primary-text-color, 0,0,0), 0.02));
+			          background: var(--wt-surface);
 			          min-width: 0;
 			        }
 	        .peoplelabel {
@@ -1290,7 +1296,6 @@ class WeeklyTrainingCard extends HTMLElement {
 	        @media (min-width: 740px) { .layout { grid-template-columns: minmax(300px, 360px) 1fr; } }
 
 		        .days { border: 1px solid var(--wt-border); border-radius: var(--wt-radius); overflow: hidden; background: var(--wt-surface); }
-		        .days, .main, .completedbar { box-shadow: 0 10px 26px rgba(0,0,0,0.04); }
 	        .day {
 	          width: 100%;
 	          display:flex;
@@ -1574,23 +1579,25 @@ class WeeklyTrainingCard extends HTMLElement {
 	          background: var(--card-background-color);
 	          color: var(--primary-text-color);
 	          border: 1px solid var(--divider-color);
-	          border-radius: 16px;
-	          box-shadow: 0 18px 54px rgba(0,0,0,0.24);
+	          border-radius: 12px;
+	          box-shadow: var(--ha-card-box-shadow, 0 10px 28px rgba(0,0,0,0.22));
 	          display:flex;
 	          flex-direction: column;
 	        }
-	        .modal-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 14px 14px 10px 14px; }
-	        .modal-title { font-weight: 900; letter-spacing: 0.1px; }
-	        .modal-b { padding: 0 14px 14px 14px; overflow: auto; -webkit-overflow-scrolling: touch; }
+	        .modal-h { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 12px 12px 8px 12px; }
+	        .modal-title { font-weight: 700; }
+	        .modal-b { padding: 12px; overflow: auto; -webkit-overflow-scrolling: touch; }
 	        .modal-f {
-	          padding: 12px 14px;
+	          padding: 10px 12px;
 	          border-top: 1px solid var(--divider-color);
 	          background: var(--card-background-color);
 	          display:flex;
 	          align-items:center;
-	          justify-content:space-between;
+	          justify-content:flex-end;
 	          gap: 10px;
 	        }
+	        .modal-f > span { flex: 1 1 auto; }
+	        .modal-f button { min-width: 96px; }
 	        .snack{
 	          position: sticky;
 	          bottom: 12px;
