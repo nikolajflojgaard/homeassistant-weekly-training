@@ -17,6 +17,11 @@ All notable changes to this project will be documented in this file.
 - Completed: show weekly tonnage estimate (based on suggested loads).
 - Workout details: add Notes field (stored on the workout).
 
+## 0.3.18 - 2026-02-15
+
+- Delete series: now offers Undo (restores the cycle config + all workouts that were deleted).
+- Right panel: add "Copy workout (Markdown)" button for the selected workout.
+
 ## 0.1.1 - 2026-02-14
 
 - Weekly canvas UI (Week + weekday selection) and improved people management in the card.

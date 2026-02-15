@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.17";
+const CARD_VERSION = "0.3.18";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -358,6 +358,144 @@ class WeeklyTrainingCard extends HTMLElement {
         this._showToast("Week copied (Markdown)", "", null);
       } else {
         window.prompt("Copy week (Markdown)", txt);
+      }
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+      this._render();
+    }
+  }
+
+  _dateFromWeekStartAndWeekday(weekStartIso, weekday) {
+    const wk = String(weekStartIso || "").slice(0, 10);
+    const wd = Number(weekday);
+    if (!wk || !Number.isFinite(wd)) return "";
+    try {
+      const d = new Date(wk + "T00:00:00Z");
+      d.setUTCDate(d.getUTCDate() + wd);
+      return d.toISOString().slice(0, 10);
+    } catch (_) {
+      return "";
+    }
+  }
+
+  _cycleSnapshotForPerson(personId) {
+    const pid = String(personId || "");
+    if (!pid) return null;
+    const person = this._personById(pid);
+    const cycle = person && person.cycle && typeof person.cycle === "object" ? JSON.parse(JSON.stringify(person.cycle)) : null;
+    if (!cycle || !cycle.enabled) return { person_id: pid, cycle: null, workouts: [] };
+
+    const start = String(cycle.start_week_start || "").slice(0, 10);
+    const weeks = (() => {
+      const n = Number(cycle.weeks != null ? cycle.weeks : 4);
+      if (!Number.isFinite(n)) return 4;
+      return Math.max(1, Math.min(12, Math.trunc(n)));
+    })();
+    const wdays = Array.isArray(cycle.training_weekdays) ? cycle.training_weekdays.map((x) => Number(x)).filter((x) => Number.isFinite(x)) : [];
+    const st = this._state || {};
+    const plans = st.plans && typeof st.plans === "object" ? st.plans : {};
+    const personPlans = plans[pid] && typeof plans[pid] === "object" ? plans[pid] : {};
+
+    const workouts = [];
+    if (!start || !wdays.length) return { person_id: pid, cycle, workouts };
+    try {
+      const ws0 = new Date(start + "T00:00:00Z");
+      for (let off = 0; off < weeks; off++) {
+        const ws = new Date(ws0.getTime());
+        ws.setUTCDate(ws.getUTCDate() + off * 7);
+        const weekStart = ws.toISOString().slice(0, 10);
+        const plan = personPlans[weekStart] && typeof personPlans[weekStart] === "object" ? personPlans[weekStart] : null;
+        const arr = plan && Array.isArray(plan.workouts) ? plan.workouts : [];
+        for (const wd of wdays) {
+          const dateIso = this._dateFromWeekStartAndWeekday(weekStart, wd);
+          if (!dateIso) continue;
+          for (const w of arr) {
+            if (!w || typeof w !== "object") continue;
+            if (String(w.date || "") !== dateIso) continue;
+            // Snapshot the full workout object, including cycle metadata.
+            workouts.push({ week_start: weekStart, workout: JSON.parse(JSON.stringify(w)) });
+          }
+        }
+      }
+    } catch (_) {}
+    return { person_id: pid, cycle, workouts };
+  }
+
+  async _restoreCycleSnapshot(snapshot) {
+    const s = snapshot && typeof snapshot === "object" ? snapshot : null;
+    if (!s) return;
+    const pid = String(s.person_id || "");
+    if (!pid) return;
+    const cycle = s.cycle && typeof s.cycle === "object" ? s.cycle : null;
+    const workouts = Array.isArray(s.workouts) ? s.workouts : [];
+    if (cycle) {
+      await this._callWS({ type: "weekly_training/set_person_cycle", entry_id: this._entryId, person_id: pid, cycle: cycle });
+    }
+    for (const x of workouts) {
+      if (!x || typeof x !== "object") continue;
+      const wk = String(x.week_start || "").slice(0, 10);
+      const w = x.workout && typeof x.workout === "object" ? x.workout : null;
+      if (!wk || !w) continue;
+      await this._upsertWorkout(pid, wk, w);
+    }
+    await this._reloadState();
+  }
+
+  async _deleteCycleWithUndo(personId) {
+    const pid = String(personId || "");
+    if (!pid) return;
+    const snap = this._cycleSnapshotForPerson(pid);
+    await this._deleteCycle(pid);
+    this._showToast("Series deleted", "Undo", { kind: "restore_cycle", snapshot: snap });
+  }
+
+  _workoutMarkdown(personName, weekStartIso, workout) {
+    const pname = String(personName || "").trim();
+    const wk = String(weekStartIso || "").slice(0, 10);
+    const w = workout && typeof workout === "object" ? workout : null;
+    if (!w) return "";
+    const daysDa = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "L\u00f8rdag", "S\u00f8ndag"];
+    const wd = Number(w.weekday);
+    const day = Number.isFinite(wd) ? (daysDa[wd] || "Day") : "Day";
+    const dateIso = String(w.date || "");
+    const wname = String(w.name || "Workout");
+    const out = [];
+    out.push(`# ${wname}`);
+    out.push("");
+    if (pname) out.push(`**Person:** ${pname}`);
+    if (wk) out.push(`**Week:** ${wk}`);
+    if (dateIso) out.push(`**Date:** ${dateIso} (${day})`);
+    out.push("");
+    const items = Array.isArray(w.items) ? w.items : [];
+    for (const it of items) {
+      if (!it || typeof it !== "object") continue;
+      const ex = String(it.exercise || "");
+      const sr = String(it.sets_reps || "");
+      const load = it.suggested_load != null ? ` @ ~${String(it.suggested_load)}` : "";
+      out.push(`- ${ex} \u2013 ${sr}${load}`);
+    }
+    if (w.notes) {
+      out.push("");
+      out.push(`> Notes: ${String(w.notes)}`);
+    }
+    return out.join("\n");
+  }
+
+  async _copySelectedWorkoutMarkdown(personId, weekStartIso, workout) {
+    const pid = String(personId || "");
+    const wk = String(weekStartIso || "").slice(0, 10);
+    const w = workout && typeof workout === "object" ? workout : null;
+    if (!pid || !wk || !w) return;
+    const person = this._personById(pid);
+    const pname = person ? String(person.name || "") : "";
+    const txt = this._workoutMarkdown(pname, wk, w);
+    if (!txt) return;
+    try {
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(txt);
+        this._showToast("Workout copied (Markdown)", "", null);
+      } else {
+        window.prompt("Copy workout (Markdown)", txt);
       }
     } catch (e) {
       this._error = String((e && e.message) || e);
@@ -2244,6 +2382,9 @@ class WeeklyTrainingCard extends HTMLElement {
 	        .mainhead { display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; }
 	        .dtitle { font-size: 16px; font-weight: 900; letter-spacing: 0.1px; }
 	        .dsub { margin-top: 3px; font-size: 12px; color: var(--wt-text2); }
+	        .pillwrap { display:flex; align-items:center; gap: 10px; }
+	        .pillwrap .pillbtn { min-height: 30px; padding: 6px 10px; }
+	        .pillwrap ha-icon { width: 18px; height: 18px; }
 	        .pill {
 	          font-size: 11px;
 	          font-weight: 900;
@@ -2684,8 +2825,11 @@ class WeeklyTrainingCard extends HTMLElement {
 		                    })()}
 		                  </div>
 		                </div>
-		                <div class="pill">${selectedWorkout ? "Workout" : "Empty"}</div>
-		              </div>
+			              <div class="pillwrap">
+			                <div class="pill">${selectedWorkout ? "Workout" : "Empty"}</div>
+			                ${selectedWorkout ? `<button class="pillbtn" id="copy-workout" title="Copy workout (Markdown)" ${saving ? "disabled" : ""}><ha-icon icon="mdi:content-copy"></ha-icon></button>` : ``}
+			              </div>
+			              </div>
 			              ${selectedWorkout ? `
 			                <div class="swipehint">Swipe right: completed. Swipe left: delete.</div>
 			                <div class="items swipable" id="swipe-zone">
@@ -3055,7 +3199,14 @@ class WeeklyTrainingCard extends HTMLElement {
 	          if (t) {
 	            this._ui.swipeX = Number(t.clientX) || 0;
 	            this._ui.swipeY = Number(t.clientY) || 0;
-	          }
+			    }
+
+		    const qCopyWorkout = this.shadowRoot ? this.shadowRoot.querySelector("#copy-workout") : null;
+		    if (qCopyWorkout && selectedWorkout) {
+		      const pid = String(viewPersonId || this._activePersonId() || "");
+		      const wk = String(weekStartIso || "").slice(0, 10);
+		      qCopyWorkout.addEventListener("click", () => { this._copySelectedWorkoutMarkdown(pid, wk, selectedWorkout); });
+		    }
 	        } catch (_) {}
 	      }, { passive: true });
 	      swipeZone.addEventListener("touchmove", (e) => {
@@ -3206,15 +3357,14 @@ class WeeklyTrainingCard extends HTMLElement {
 	      await this._deleteWorkout(pid2, wk2, date2);
 	      if (snapshot) this._showToast("Workout deleted", "Undo", { kind: "restore_workout", person_id: pid2, week_start: wk2, workout: snapshot });
 	    });
-	    const qCfdSeries = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-series") : null;
-	    if (qCfdSeries) qCfdSeries.addEventListener("click", async () => {
-	      const d = this._ui.confirmDelete || {};
-	      const pid2 = String(d.person_id || "");
-	      if (!pid2) return;
-	      this._ui.confirmDelete = null;
-	      await this._deleteCycle(pid2);
-	      this._showToast("Series deleted", "", null);
-	    });
+		    const qCfdSeries = this.shadowRoot ? this.shadowRoot.querySelector("#cfd-series") : null;
+		    if (qCfdSeries) qCfdSeries.addEventListener("click", async () => {
+		      const d = this._ui.confirmDelete || {};
+		      const pid2 = String(d.person_id || "");
+		      if (!pid2) return;
+		      this._ui.confirmDelete = null;
+		      await this._deleteCycleWithUndo(pid2);
+		    });
 
 	    // Settings modal
     const qSettingsClose = this.shadowRoot ? this.shadowRoot.querySelector("#settings-close") : null;
@@ -3456,30 +3606,34 @@ class WeeklyTrainingCard extends HTMLElement {
 		    // Snackbar / Undo
 		    const qSnackX = this.shadowRoot ? this.shadowRoot.querySelector("#snack-x") : null;
 		    if (qSnackX) qSnackX.addEventListener("click", () => { this._ui.toast = null; this._render(); });
-		    const qSnackAct = this.shadowRoot ? this.shadowRoot.querySelector("#snack-act") : null;
-		    if (qSnackAct) qSnackAct.addEventListener("click", async () => {
-		      const u = this._ui.toast && this._ui.toast.undo ? this._ui.toast.undo : null;
-		      this._ui.toast = null;
-		      this._render();
-		      if (!u || typeof u !== "object") return;
-		      try {
-		        if (u.kind === "reload") {
-		          await this._reloadState();
-		          return;
-		        }
-		        if (u.kind === "toggle_completed") {
-		          await this._setWorkoutCompleted(String(u.person_id || ""), String(u.week_start || ""), String(u.date || ""), Boolean(u.completed));
-		          return;
-		        }
-		        if (u.kind === "restore_workout") {
-		          await this._upsertWorkout(String(u.person_id || ""), String(u.week_start || ""), u.workout || {});
-		          await this._reloadState();
-		        }
-		      } catch (e) {
-		        this._error = String((e && e.message) || e);
-		        this._render();
-		      }
-		    });
+			    const qSnackAct = this.shadowRoot ? this.shadowRoot.querySelector("#snack-act") : null;
+			    if (qSnackAct) qSnackAct.addEventListener("click", async () => {
+			      const u = this._ui.toast && this._ui.toast.undo ? this._ui.toast.undo : null;
+			      this._ui.toast = null;
+			      this._render();
+			      if (!u || typeof u !== "object") return;
+			      try {
+			        if (u.kind === "reload") {
+			          await this._reloadState();
+			          return;
+			        }
+			        if (u.kind === "toggle_completed") {
+			          await this._setWorkoutCompleted(String(u.person_id || ""), String(u.week_start || ""), String(u.date || ""), Boolean(u.completed));
+			          return;
+			        }
+			        if (u.kind === "restore_cycle") {
+			          await this._restoreCycleSnapshot(u.snapshot || null);
+			          return;
+			        }
+			        if (u.kind === "restore_workout") {
+			          await this._upsertWorkout(String(u.person_id || ""), String(u.week_start || ""), u.workout || {});
+			          await this._reloadState();
+			        }
+			      } catch (e) {
+			        this._error = String((e && e.message) || e);
+			        this._render();
+			      }
+			    });
 
 	    // Restore focus after re-render (only happens on load/save/generate)
 	    queueMicrotask(() => this._restoreFocus());
