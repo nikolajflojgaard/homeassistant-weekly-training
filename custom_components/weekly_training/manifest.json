@@ -2,13 +2,13 @@
   "domain": "weekly_training",
   "name": "Weekly Training",
   "codeowners": [
-    "@clawHomeAssistantNiflo"
+    "@nikolajflojgaard"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/clawHomeAssistantNiflo/homeassistant-weekly-training",
+  "documentation": "https://github.com/nikolajflojgaard/homeassistant-weekly-training",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/clawHomeAssistantNiflo/homeassistant-weekly-training/issues",
+  "issue_tracker": "https://github.com/nikolajflojgaard/homeassistant-weekly-training/issues",
   "loggers": [
     "custom_components.weekly_training"
   ],
