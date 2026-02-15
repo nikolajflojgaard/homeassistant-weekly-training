@@ -244,6 +244,38 @@ async def ws_delete_workout_series(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "weekly_training/delete_cycle",
+        vol.Required("entry_id"): str,
+        vol.Required("person_id"): str,
+        vol.Optional("expected_rev"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_delete_cycle(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Delete the entire active cycle for a person (workouts + planned markers)."""
+    entry_id = msg["entry_id"]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        connection.send_error(msg["id"], "entry_not_found", f"No entry found for entry_id={entry_id}")
+        return
+    try:
+        state = await coordinator.store.async_delete_cycle(
+            person_id=str(msg["person_id"]),
+            expected_rev=msg.get("expected_rev"),
+        )
+    except ConflictError as e:
+        connection.send_error(msg["id"], "conflict", str(e))
+        return
+    await coordinator.async_request_refresh()
+    connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "weekly_training/set_active_person",
         vol.Required("entry_id"): str,
         vol.Required("person_id"): str,
@@ -745,6 +777,7 @@ def async_register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_set_workout_completed)
     websocket_api.async_register_command(hass, ws_delete_workout)
     websocket_api.async_register_command(hass, ws_delete_workout_series)
+    websocket_api.async_register_command(hass, ws_delete_cycle)
     websocket_api.async_register_command(hass, ws_upsert_workout)
     websocket_api.async_register_command(hass, ws_get_history)
     websocket_api.async_register_command(hass, ws_export_config)

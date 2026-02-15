@@ -257,3 +257,9 @@ All notable changes to this project will be documented in this file.
 
 - People: updating 1RM maxes now recalculates suggested loads for all workouts in the person's active 4-week cycle.
 - Workout details: add **Delete series** button for cycle workouts (same series delete as swipe-left).
+
+## 0.3.15 - 2026-02-14
+
+- Delete series: now fully resets the active cycle for a person:
+  - deletes all workouts across the whole cycle (all planned days)
+  - clears Planned markers (cycle config removed)

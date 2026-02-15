@@ -1056,6 +1056,95 @@ class WeeklyTrainingStore:
         state["plans"] = plans
         return await self.async_save(state)
 
+    async def async_delete_cycle(self, *, person_id: str, expected_rev: int | None = None) -> dict[str, Any]:
+        """Delete the entire active cycle for a person.
+
+        This removes:
+        - all workouts in the cycle window (all planned weekdays across N weeks)
+        - the per-person cycle config itself (which removes Planned markers)
+        """
+        state = await self.async_load()
+        self._assert_rev(state, expected_rev)
+
+        pid = str(person_id or "").strip()
+        if not pid:
+            return state
+
+        people = state.get("people")
+        if not isinstance(people, list):
+            return state
+        person = next((p for p in people if isinstance(p, dict) and str(p.get("id") or "") == pid), None)
+        if not isinstance(person, dict):
+            return state
+
+        cy = person.get("cycle")
+        if not isinstance(cy, dict) or not bool(cy.get("enabled")):
+            # Still clear any stray cycle field to guarantee reset.
+            if person.get("cycle") is not None:
+                person["cycle"] = None
+                return await self.async_save(state)
+            return state
+
+        start_raw = str(cy.get("start_week_start") or "").strip()[:10]
+        if not start_raw:
+            person["cycle"] = None
+            return await self.async_save(state)
+        try:
+            start_ws = date.fromisoformat(start_raw)
+        except Exception:  # noqa: BLE001
+            person["cycle"] = None
+            return await self.async_save(state)
+        try:
+            weeks = max(1, min(12, int(cy.get("weeks") or 4)))
+        except Exception:  # noqa: BLE001
+            weeks = 4
+        tdays = cy.get("training_weekdays")
+        training_weekdays: list[int] = []
+        if isinstance(tdays, list):
+            for x in tdays:
+                try:
+                    xi = int(x)
+                except Exception:  # noqa: BLE001
+                    continue
+                if 0 <= xi <= 6 and xi not in training_weekdays:
+                    training_weekdays.append(xi)
+        training_weekdays.sort()
+
+        plans = state.get("plans")
+        if not isinstance(plans, dict):
+            plans = {}
+        person_plans = plans.get(pid)
+        if not isinstance(person_plans, dict):
+            person_plans = {}
+
+        changed = False
+        if training_weekdays:
+            for i in range(weeks):
+                week_start_day = start_ws + timedelta(days=i * 7)
+                wk_key = week_start_day.isoformat()
+                plan = person_plans.get(wk_key)
+                if not isinstance(plan, dict):
+                    continue
+                workouts = plan.get("workouts")
+                if not isinstance(workouts, list) or not workouts:
+                    continue
+                targets = {(week_start_day + timedelta(days=wd)).isoformat() for wd in training_weekdays}
+                next_workouts = [w for w in workouts if not (isinstance(w, dict) and str(w.get("date") or "") in targets)]
+                if len(next_workouts) != len(workouts):
+                    plan2 = dict(plan)
+                    plan2["workouts"] = next_workouts
+                    person_plans[wk_key] = plan2
+                    changed = True
+
+        # Clear cycle config (removes Planned markers).
+        person["cycle"] = None
+        changed = True
+
+        plans[pid] = person_plans
+        state["plans"] = plans
+        state["people"] = people
+        return await self.async_save(state)
+
     async def async_upsert_workout(
         self,
         *,

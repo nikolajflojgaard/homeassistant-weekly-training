@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.14";
+const CARD_VERSION = "0.3.15";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -756,6 +756,25 @@ class WeeklyTrainingCard extends HTMLElement {
         start_week_start: String(seriesStartIso || ""),
         weekday: Number(weekday || 0),
         weeks: Number(weeks || 4),
+      });
+      this._applyState((res && res.state) || this._state);
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+    } finally {
+      this._saving = false;
+      this._render();
+    }
+  }
+
+  async _deleteCycle(personId) {
+    this._saving = true;
+    this._error = "";
+    this._render();
+    try {
+      const res = await this._callWS({
+        type: "weekly_training/delete_cycle",
+        entry_id: this._entryId,
+        person_id: String(personId || ""),
       });
       this._applyState((res && res.state) || this._state);
     } catch (e) {
@@ -1575,13 +1594,13 @@ class WeeklyTrainingCard extends HTMLElement {
 	                ${isSeries ? "This workout is part of a 4-week cycle. What do you want to delete?" : "Delete this workout?"}
 	              </div>
 	            </div>
-	            <div class="modal-f">
-	              <button id="cfd-cancel" ${saving ? "disabled" : ""}>Cancel</button>
-	              <div class="actions" style="margin:0">
-	                ${isSeries ? `<button class="danger" id="cfd-series" ${saving ? "disabled" : ""}>Delete series</button>` : ``}
-	                <button class="danger" id="cfd-one" ${saving ? "disabled" : ""}>Delete workout</button>
-	              </div>
-	            </div>
+			  <div class="modal-f">
+			    <button id="cfd-cancel" ${saving ? "disabled" : ""}>Cancel</button>
+			    <div class="actions" style="margin:0">
+			      ${isSeries ? `<button class="danger" id="cfd-series" ${saving ? "disabled" : ""}>Delete series</button>` : ``}
+			      <button class="danger" id="cfd-one" ${saving ? "disabled" : ""}>Delete workout</button>
+			    </div>
+			  </div>
 	          </div>
 	        </div>
 	      `;
@@ -3030,12 +3049,9 @@ class WeeklyTrainingCard extends HTMLElement {
 	    if (qCfdSeries) qCfdSeries.addEventListener("click", async () => {
 	      const d = this._ui.confirmDelete || {};
 	      const pid2 = String(d.person_id || "");
-	      const ss = String(d.series_start || "").slice(0, 10);
-	      const wd2 = Number(d.weekday || 0);
-	      const weeks2 = Number(d.weeks || 4);
-	      if (!pid2 || !ss) return;
+	      if (!pid2) return;
 	      this._ui.confirmDelete = null;
-	      await this._deleteWorkoutSeries(pid2, ss, wd2, weeks2);
+	      await this._deleteCycle(pid2);
 	      this._showToast("Series deleted", "", null);
 	    });
 
