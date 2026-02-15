@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.16 - 2026-02-15
+
+- UI: "Planned" badge is now only shown as a placeholder when a day has no workouts (workout markers are enough).
+
 ## 0.1.1 - 2026-02-14
 
 - Weekly canvas UI (Week + weekday selection) and improved people management in the card.
