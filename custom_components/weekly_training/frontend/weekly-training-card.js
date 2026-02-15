@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.16";
+const CARD_VERSION = "0.3.17";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -241,6 +241,7 @@ class WeeklyTrainingCard extends HTMLElement {
     const msg = String(message || "").trim();
     if (!msg) return;
     this._ui.toast = { message: msg, action: action ? String(action) : "", undo: undo || null };
+    this._render();
     // Auto-dismiss to keep UI clean on tablet.
     try {
       if (this._ui._toastTimer) window.clearTimeout(this._ui._toastTimer);
@@ -249,6 +250,119 @@ class WeeklyTrainingCard extends HTMLElement {
         this._render();
       }, 8000);
     } catch (_) {}
+  }
+
+  _parseSetsReps(value) {
+    const raw = String(value || "").trim();
+    // Common formats:
+    // - "3 x 5"
+    // - "3x5"
+    // - "3 x 5 ~75" (we'll ignore trailing)
+    const m = raw.match(/(\\d+)\\s*x\\s*(\\d+)/i);
+    if (!m) return { sets: 0, reps: 0 };
+    const sets = Number(m[1] || 0);
+    const reps = Number(m[2] || 0);
+    return { sets: Number.isFinite(sets) ? sets : 0, reps: Number.isFinite(reps) ? reps : 0 };
+  }
+
+  _workoutTonnage(workout) {
+    const w = workout && typeof workout === "object" ? workout : null;
+    if (!w) return 0;
+    const items = Array.isArray(w.items) ? w.items : [];
+    let sum = 0;
+    for (const it of items) {
+      if (!it || typeof it !== "object") continue;
+      const load = it.suggested_load;
+      if (load == null) continue;
+      const v = Number(load);
+      if (!Number.isFinite(v)) continue;
+      const sr = this._parseSetsReps(String(it.sets_reps || ""));
+      const repsTotal = (sr.sets || 0) * (sr.reps || 0);
+      if (!repsTotal) continue;
+      sum += v * repsTotal;
+    }
+    if (!Number.isFinite(sum)) return 0;
+    return Math.round(sum);
+  }
+
+  _weekMarkdown(weekStartIso) {
+    const wk = String(weekStartIso || "").slice(0, 10);
+    const st = this._state || {};
+    const plans = st.plans && typeof st.plans === "object" ? st.plans : {};
+    const people = this._people();
+    const daysDa = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "L\u00f8rdag", "S\u00f8ndag"];
+    if (!wk) return "";
+
+    const out = [];
+    out.push(`# Week ${this._isoWeekNumberFromWeekStart(wk)} (${this._formatWeekRange(wk)})`);
+    out.push("");
+
+    for (const p of people) {
+      const pid = String((p && p.id) || "");
+      if (!pid) continue;
+      const pname = String((p && p.name) || pid);
+      const personPlans = plans[pid] && typeof plans[pid] === "object" ? plans[pid] : {};
+      const plan = personPlans[wk] && typeof personPlans[wk] === "object" ? personPlans[wk] : null;
+      const workouts = plan && Array.isArray(plan.workouts) ? plan.workouts : [];
+      if (!workouts.length) continue;
+
+      out.push(`## ${pname}`);
+      out.push("");
+
+      const byDay = new Map();
+      for (const w of workouts) {
+        if (!w || typeof w !== "object") continue;
+        const wd = Number(w.weekday);
+        if (!Number.isFinite(wd)) continue;
+        if (!byDay.has(wd)) byDay.set(wd, []);
+        byDay.get(wd).push(w);
+      }
+      for (let wd = 0; wd < 7; wd++) {
+        const arr = byDay.get(wd) || [];
+        if (!arr.length) continue;
+        for (const w of arr) {
+          const wname = String(w.name || "Workout");
+          const dateIso = String(w.date || "");
+          out.push(`### ${daysDa[wd] || "Day"} (${dateIso || wk})`);
+          out.push(`**${wname}**${w.completed ? " (completed)" : ""}`);
+          out.push("");
+          const items = Array.isArray(w.items) ? w.items : [];
+          for (const it of items) {
+            if (!it || typeof it !== "object") continue;
+            const ex = String(it.exercise || "");
+            const sr = String(it.sets_reps || "");
+            const load = it.suggested_load != null ? ` @ ~${String(it.suggested_load)}` : "";
+            out.push(`- ${ex} \u2013 ${sr}${load}`);
+          }
+          if (w.notes) {
+            out.push("");
+            out.push(`> Notes: ${String(w.notes)}`);
+          }
+          out.push("");
+        }
+      }
+    }
+
+    if (out.length <= 2) return `# Week ${this._isoWeekNumberFromWeekStart(wk)} (${this._formatWeekRange(wk)})\n\n(No workouts planned)`;
+    return out.join("\n");
+  }
+
+  async _copyWeekMarkdown() {
+    const rt = (this._state && this._state.runtime) || {};
+    const wk = this._selectedWeekStartIso(rt);
+    const txt = this._weekMarkdown(wk);
+    if (!txt) return;
+    try {
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(txt);
+        this._showToast("Week copied (Markdown)", "", null);
+      } else {
+        window.prompt("Copy week (Markdown)", txt);
+      }
+    } catch (e) {
+      this._error = String((e && e.message) || e);
+      this._render();
+    }
   }
 
 	  async _reloadState() {
@@ -1523,13 +1637,18 @@ class WeeklyTrainingCard extends HTMLElement {
 	                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
 	              </div>
 
-	              <div style="margin-top:12px">
-	                <div class="label">Name</div>
-	                <input data-focus-key="ew_name" id="ew-name" type="text" value="${this._escape(wname)}" ${saving ? "disabled" : ""}/>
-	              </div>
+		              <div style="margin-top:12px">
+		                <div class="label">Name</div>
+		                <input data-focus-key="ew_name" id="ew-name" type="text" value="${this._escape(wname)}" ${saving ? "disabled" : ""}/>
+		              </div>
 
-	              <div class="divider"></div>
-	              <div class="label">Exercises</div>
+		              <div style="margin-top:12px">
+		                <div class="label">Notes</div>
+		                <textarea data-focus-key="ew_notes" id="ew-notes" rows="3" placeholder="Optional notes..." ${saving ? "disabled" : ""}>${this._escape(String(w.notes || ""))}</textarea>
+		              </div>
+
+		              <div class="divider"></div>
+		              <div class="label">Exercises</div>
 	              <div class="items" style="margin-top:10px">
 	                ${items.map((it, idx) => {
 	                  if (!it || typeof it !== "object") return "";
@@ -1737,15 +1856,16 @@ class WeeklyTrainingCard extends HTMLElement {
 	      `;
 		    })() : "";
 
-			    const completedModal = this._ui && this._ui.showCompleted ? (() => {
-		      const d = this._ui.completedDetail || {};
+				    const completedModal = this._ui && this._ui.showCompleted ? (() => {
+			      const d = this._ui.completedDetail || {};
 		      const pname = String(d.person_name || "");
 		      const pcolor = String(d.person_color || "");
 		      const wname = String(d.workout_name || "Workout");
 		      const dateIso = String(d.date || "");
-		      const items = Array.isArray(d.items) ? d.items : [];
-		      const canDelete = Boolean(d.can_delete);
-		      return `
+			      const items = Array.isArray(d.items) ? d.items : [];
+			      const notes = String(d.notes || "");
+			      const canDelete = Boolean(d.can_delete);
+			      return `
 		        <div class="modal-backdrop" id="completed-backdrop" aria-hidden="false">
 		          <div class="modal" role="dialog" aria-label="Completed workout">
 		            <div class="modal-h">
@@ -1758,7 +1878,7 @@ class WeeklyTrainingCard extends HTMLElement {
 		                <span style="margin-left:8px; font-weight:800">${this._escape(pname)}</span>
 		                <span style="margin-left:8px; color: var(--secondary-text-color)">${this._escape(dateIso)}</span>
 		              </div>
-		              <div class="items" style="margin-top:12px">
+			              <div class="items" style="margin-top:12px">
 		                ${items.map((it) => {
 		                  if (!it || typeof it !== "object") return "";
 		                  const ex = String(it.exercise || "");
@@ -1766,16 +1886,17 @@ class WeeklyTrainingCard extends HTMLElement {
 		                  const load = it.suggested_load != null ? String(it.suggested_load) : "";
 		                  return `<div class="item"><div class="ex">${this._escape(ex)}</div><div class="range">${this._escape(sr)}${load ? ` \u2022 ~${this._escape(load)}` : ""}</div></div>`;
 		                }).join("")}
-		              </div>
-		            </div>
-		            <div class="modal-f">
-		              ${canDelete ? `<button class="danger" id="completed-delete" ${saving ? "disabled" : ""}>Delete</button>` : `<span></span>`}
-		              <button id="completed-ok">Close</button>
-		            </div>
-		          </div>
-		        </div>
-		      `;
-			    })() : "";
+			              </div>
+			              ${notes ? `<div class="divider"></div><div class="label">Notes</div><div class="muted" style="white-space:pre-wrap">${this._escape(notes)}</div>` : ``}
+			            </div>
+			            <div class="modal-f">
+			              ${canDelete ? `<button class="danger" id="completed-delete" ${saving ? "disabled" : ""}>Delete</button>` : `<span></span>`}
+			              <button id="completed-ok">Close</button>
+			            </div>
+			          </div>
+			        </div>
+			      `;
+				    })() : "";
 
 		    const historyModal = this._ui && this._ui.showHistory ? (() => {
 		      const hist = Array.isArray(this._ui.history) ? this._ui.history : [];
@@ -1866,18 +1987,19 @@ class WeeklyTrainingCard extends HTMLElement {
 		        .muted { color: var(--wt-text2); }
 			        .header { display:flex; flex-direction:column; gap: 12px; }
 			        .h-title { font-size: 22px; font-weight: 800; letter-spacing: 0.2px; }
-			        .topbar {
-			          display:grid;
-			          grid-template-columns: auto 1fr auto;
-			          gap: 12px;
-			          align-items: center;
-			        }
-			        @media (max-width: 740px) {
-			          .topbar { grid-template-columns: 1fr auto; grid-template-areas: "week gear" "people people"; }
-			          .weekpill { grid-area: week; min-width: 0; }
-			          .toppeople { grid-area: people; }
-			          .gearbtn { grid-area: gear; }
-			        }
+				        .topbar {
+				          display:grid;
+				          grid-template-columns: auto 1fr auto;
+				          gap: 12px;
+				          align-items: center;
+				        }
+				        .topicons{ display:flex; gap: 10px; align-items:center; justify-content:flex-end; }
+				        @media (max-width: 740px) {
+				          .topbar { grid-template-columns: 1fr auto; grid-template-areas: "week gear" "people people"; }
+				          .weekpill { grid-area: week; min-width: 0; }
+				          .toppeople { grid-area: people; }
+				          .topicons { grid-area: gear; }
+				        }
 		        .onboard{
 		          display:flex;
 		          align-items:center;
@@ -2406,6 +2528,22 @@ class WeeklyTrainingCard extends HTMLElement {
 	          font-size: 18px;
 	          line-height: 0;
 	        }
+	        textarea{
+	          width: 100%;
+	          box-sizing: border-box;
+	          font: inherit;
+	          border: 1px solid var(--wt-border);
+	          border-radius: var(--wt-radius-sm);
+	          padding: 10px;
+	          background: var(--wt-surface);
+	          color: var(--primary-text-color);
+	          resize: vertical;
+	          outline: none;
+	        }
+	        textarea:focus{
+	          border-color: var(--wt-accent);
+	          box-shadow: 0 0 0 3px rgba(var(--rgb-primary-color, 3, 169, 244), 0.20);
+	        }
         .xlist { border: 1px solid var(--divider-color); border-radius: 12px; overflow: auto; max-height: 360px; }
         .xrow { display:flex; gap: 10px; align-items:center; padding: 10px; border-bottom: 1px solid var(--divider-color); }
         .xrow:last-child { border-bottom: 0; }
@@ -2481,11 +2619,16 @@ class WeeklyTrainingCard extends HTMLElement {
 		                </div>
 		              </div>
 
-		              <button class="gearbtn" id="settings" title="Exercise settings" ${saving ? "disabled" : ""}>
-		                <ha-icon icon="mdi:tune-variant"></ha-icon>
-		              </button>
-		            </div>
-		          </div>
+			              <div class="topicons">
+			                <button class="gearbtn" id="copy-week" title="Copy week (Markdown)" ${saving ? "disabled" : ""}>
+			                  <ha-icon icon="mdi:content-copy"></ha-icon>
+			                </button>
+			                <button class="gearbtn" id="settings" title="Exercise settings" ${saving ? "disabled" : ""}>
+			                  <ha-icon icon="mdi:tune-variant"></ha-icon>
+			                </button>
+			              </div>
+			            </div>
+			          </div>
 
           <div class="layout">
 	            <div class="days" role="list" aria-label="Weekdays">
@@ -2605,14 +2748,20 @@ class WeeklyTrainingCard extends HTMLElement {
 		            }).join("");
 	            return `
 	              <div class="completedbar">
-	                <div class="cb-h">
-	                  <div class="cb-title">Completed</div>
-	                  <div class="muted">${this._escape(String(out.length))}</div>
-	                </div>
-	                <div class="cb-chips">
-	                  ${chips || `<div class="muted">No completed workouts this week.</div>`}
-	                </div>
-	              </div>
+			                <div class="cb-h">
+			                  <div class="cb-title">Completed</div>
+			                  ${(() => {
+			                    const n = out.length;
+			                    let ton = 0;
+			                    for (const x of out) ton += this._workoutTonnage(x.workout);
+			                    const ttxt = ton > 0 ? ` \u2022 ~${String(ton)} kg` : "";
+			                    return `<div class="muted">${this._escape(String(n))}${this._escape(ttxt)}</div>`;
+			                  })()}
+			                </div>
+			                <div class="cb-chips">
+			                  ${chips || `<div class="muted">No completed workouts this week.</div>`}
+			                </div>
+			              </div>
 	            `;
 		          })()}
 
@@ -2629,9 +2778,11 @@ class WeeklyTrainingCard extends HTMLElement {
 		      </ha-card>
 		    `;
 
-	    // Wire events (header)
-		    const qSettings = this.shadowRoot ? this.shadowRoot.querySelector("#settings") : null;
-		    if (qSettings) qSettings.addEventListener("click", () => { this._openSettingsModal(); });
+		    // Wire events (header)
+		    const qCopyWeek = this.shadowRoot ? this.shadowRoot.querySelector("#copy-week") : null;
+		    if (qCopyWeek) qCopyWeek.addEventListener("click", () => { this._copyWeekMarkdown(); });
+			    const qSettings = this.shadowRoot ? this.shadowRoot.querySelector("#settings") : null;
+			    if (qSettings) qSettings.addEventListener("click", () => { this._openSettingsModal(); });
 	    const qWkPrev = this.shadowRoot ? this.shadowRoot.querySelector("#wk-prev") : null;
 	    if (qWkPrev) qWkPrev.addEventListener("click", () => { this._setWeekOffset(this._clampWeekOffset(this._weekOffset) - 1); });
 	    const qWkNext = this.shadowRoot ? this.shadowRoot.querySelector("#wk-next") : null;
@@ -2983,11 +3134,18 @@ class WeeklyTrainingCard extends HTMLElement {
 	    if (qEwBackdrop) qEwBackdrop.addEventListener("click", (e) => {
 	      if (e.target && e.target.id === "editw-backdrop") { this._ui.showEditWorkout = false; this._ui.editWorkout = null; this._render(); }
 	    });
-	    const qEwName = this.shadowRoot ? this.shadowRoot.querySelector("#ew-name") : null;
-	    if (qEwName) qEwName.addEventListener("input", (e) => {
-	      if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
-	      this._ui.editWorkout.workout.name = String(e.target.value || "");
-	    });
+		    const qEwName = this.shadowRoot ? this.shadowRoot.querySelector("#ew-name") : null;
+		    if (qEwName) qEwName.addEventListener("input", (e) => {
+		      if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
+		      this._ui.editWorkout.workout.name = String(e.target.value || "");
+		    });
+		    const qEwNotes = this.shadowRoot ? this.shadowRoot.querySelector("#ew-notes") : null;
+		    if (qEwNotes) qEwNotes.addEventListener("input", (e) => {
+		      if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
+		      const v = String(e.target.value || "");
+		      if (!v.trim()) delete this._ui.editWorkout.workout.notes;
+		      else this._ui.editWorkout.workout.notes = v;
+		    });
 	    this.shadowRoot && this.shadowRoot.querySelectorAll("input[data-ew-sr]").forEach((el) => {
 	      el.addEventListener("input", (e) => {
 	        if (!this._ui.editWorkout || !this._ui.editWorkout.workout) return;
@@ -3220,16 +3378,17 @@ class WeeklyTrainingCard extends HTMLElement {
 		              const w = workouts2.find((x) => x && typeof x === "object" && String(x.date || "") === dateIso) || null;
 		              const p = this._personById(pid);
 		              if (!w || !p) return;
-		              this._ui.completedDetail = {
-		                person_id: pid,
-		                week_start: wk,
-		                person_name: String(p.name || ""),
-		                person_color: this._personColor(p),
-		                workout_name: String(w.name || "Workout"),
-		                date: String(w.date || ""),
-		                items: Array.isArray(w.items) ? w.items : [],
-		                can_delete: true,
-		              };
+			              this._ui.completedDetail = {
+			                person_id: pid,
+			                week_start: wk,
+			                person_name: String(p.name || ""),
+			                person_color: this._personColor(p),
+			                workout_name: String(w.name || "Workout"),
+			                date: String(w.date || ""),
+			                items: Array.isArray(w.items) ? w.items : [],
+			                notes: String(w.notes || ""),
+			                can_delete: true,
+			              };
 		              this._ui.showCompleted = true;
 		              this._render();
 	            } catch (_) {}
@@ -3277,16 +3436,17 @@ class WeeklyTrainingCard extends HTMLElement {
 		          const entry = arr.find((c) => c && typeof c === "object" && String(c.person_id || "") === pid && String(c.date || "") === dateIso) || null;
 		          if (!entry) return;
 		          const w = entry.workout || {};
-		          this._ui.completedDetail = {
-		            person_id: pid,
-		            week_start: wk,
-		            person_name: String(entry.person_name || ""),
-		            person_color: String(entry.person_color || ""),
-		            workout_name: String((w && w.name) || "Workout"),
-		            date: String((w && w.date) || dateIso),
-		            items: Array.isArray(w.items) ? w.items : [],
-		            can_delete: false,
-		          };
+			          this._ui.completedDetail = {
+			            person_id: pid,
+			            week_start: wk,
+			            person_name: String(entry.person_name || ""),
+			            person_color: String(entry.person_color || ""),
+			            workout_name: String((w && w.name) || "Workout"),
+			            date: String((w && w.date) || dateIso),
+			            items: Array.isArray(w.items) ? w.items : [],
+			            notes: String((w && w.notes) || ""),
+			            can_delete: false,
+			          };
 		          this._ui.showCompleted = true;
 		          this._render();
 		        } catch (_) {}

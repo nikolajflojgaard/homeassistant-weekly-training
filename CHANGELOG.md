@@ -10,6 +10,13 @@ All notable changes to this project will be documented in this file.
 
 - UI: "Planned" badge is now only shown as a placeholder when a day has no workouts (workout markers are enough).
 
+## 0.3.17 - 2026-02-15
+
+- UI: snack/toast now re-renders immediately (Undo is reliably visible).
+- Header: add "Copy week (Markdown)" button.
+- Completed: show weekly tonnage estimate (based on suggested loads).
+- Workout details: add Notes field (stored on the workout).
+
 ## 0.1.1 - 2026-02-14
 
 - Weekly canvas UI (Week + weekday selection) and improved people management in the card.
