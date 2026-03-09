@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.20 - 2026-03-09
+
+- Add optional auto-sync to Household Chores after workout generation.
+- Add Weekly Training options for `auto_sync_to_household` and `household_entry_id`.
+- Reuse the same sync logic for both manual service calls and automatic sync.
+
 ## 0.3.19 - 2026-03-09
 
 - Add backend service `weekly_training.sync_to_household_chores`.

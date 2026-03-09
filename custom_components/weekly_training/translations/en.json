@@ -16,7 +16,9 @@
       "init": {
         "title": "Options",
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "auto_sync_to_household": "Auto-sync to Household Chores",
+          "household_entry_id": "Household Chores entry ID"
         }
       }
     }

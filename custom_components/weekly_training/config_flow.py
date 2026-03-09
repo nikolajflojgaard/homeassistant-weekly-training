@@ -15,6 +15,9 @@ from .const import (
     DOMAIN,
 )
 
+CONF_AUTO_SYNC_TO_HOUSEHOLD = "auto_sync_to_household"
+CONF_HOUSEHOLD_ENTRY_ID = "household_entry_id"
+
 
 class WeeklyTrainingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Weekly Training."""
@@ -60,6 +63,8 @@ class WeeklyTrainingOptionsFlow(config_entries.OptionsFlow):
                 title="",
                 data={
                     CONF_NAME: name,
+                    CONF_AUTO_SYNC_TO_HOUSEHOLD: bool(user_input.get(CONF_AUTO_SYNC_TO_HOUSEHOLD, False)),
+                    CONF_HOUSEHOLD_ENTRY_ID: str(user_input.get(CONF_HOUSEHOLD_ENTRY_ID, "")).strip(),
                 },
             )
 
@@ -67,9 +72,13 @@ class WeeklyTrainingOptionsFlow(config_entries.OptionsFlow):
             CONF_NAME,
             self.config_entry.data.get(CONF_NAME, DEFAULT_NAME),
         )
+        current_auto_sync = bool(self.config_entry.options.get(CONF_AUTO_SYNC_TO_HOUSEHOLD, False))
+        current_household_entry_id = str(self.config_entry.options.get(CONF_HOUSEHOLD_ENTRY_ID, ""))
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=str(current_name)): str,
+                vol.Required(CONF_AUTO_SYNC_TO_HOUSEHOLD, default=current_auto_sync): bool,
+                vol.Optional(CONF_HOUSEHOLD_ENTRY_ID, default=current_household_entry_id): str,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

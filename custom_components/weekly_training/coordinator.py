@@ -22,6 +22,7 @@ from .const import (
 from .library import ExerciseLibrary
 from .planner import generate_session
 from .storage import WeeklyTrainingStore
+from .services import async_sync_plan_to_household
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -153,6 +154,24 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             plan=plan,
             expected_rev=expected_rev,
         )
+        household_entry_id = str(self.entry.options.get("household_entry_id") or "").strip()
+        auto_sync = bool(self.entry.options.get("auto_sync_to_household", False))
+        if auto_sync and household_entry_id and active_id:
+            try:
+                await async_sync_plan_to_household(
+                    self.hass,
+                    entry_id=self.entry.entry_id,
+                    household_entry_id=household_entry_id,
+                    person_id=active_id,
+                    week_offset=effective_week_offset,
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception(
+                    "Auto-sync to Household Chores failed for entry_id=%s household_entry_id=%s person_id=%s",
+                    self.entry.entry_id,
+                    household_entry_id,
+                    active_id,
+                )
         # Nudge entity UI to refresh options/overrides when generation happens.
         try:
             from homeassistant.helpers.dispatcher import async_dispatcher_send
