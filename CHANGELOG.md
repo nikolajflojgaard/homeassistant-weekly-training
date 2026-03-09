@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.22 - 2026-03-09
+
+- Extend Household Chores auto-sync to additional plan mutation flows: complete, delete, upsert, and cycle generation.
+- Add coordinator helper for week-based auto-sync reuse.
+- Keep single-workout explicit weekday/week-offset fix from 0.3.21 intact.
+
 ## 0.3.21 - 2026-03-09
 
 - Fix single-workout generation to pass selected weekday and week offset explicitly from the card UI.

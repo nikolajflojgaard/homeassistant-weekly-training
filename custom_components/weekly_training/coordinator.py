@@ -70,6 +70,32 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         monday = today - timedelta(days=today.weekday())
         return monday + timedelta(days=int(offset) * 7)
 
+    async def async_maybe_sync_household(self, *, person_id: str, week_start: str) -> None:
+        """Auto-sync one person's week into Household Chores when enabled."""
+        household_entry_id = str(self.entry.options.get("household_entry_id") or "").strip()
+        auto_sync = bool(self.entry.options.get("auto_sync_to_household", False))
+        if not (auto_sync and household_entry_id and person_id and week_start):
+            return
+        try:
+            current_week_start = self._week_start_for_offset(0).isoformat()
+            delta_days = (date.fromisoformat(week_start) - date.fromisoformat(current_week_start)).days
+            week_offset = int(round(delta_days / 7))
+            await async_sync_plan_to_household(
+                self.hass,
+                entry_id=self.entry.entry_id,
+                household_entry_id=household_entry_id,
+                person_id=person_id,
+                week_offset=week_offset,
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception(
+                "Auto-sync to Household Chores failed for entry_id=%s household_entry_id=%s person_id=%s week_start=%s",
+                self.entry.entry_id,
+                household_entry_id,
+                person_id,
+                week_start,
+            )
+
     async def async_generate_for_day(
         self,
         *,
@@ -154,24 +180,7 @@ class WeeklyTrainingCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             plan=plan,
             expected_rev=expected_rev,
         )
-        household_entry_id = str(self.entry.options.get("household_entry_id") or "").strip()
-        auto_sync = bool(self.entry.options.get("auto_sync_to_household", False))
-        if auto_sync and household_entry_id and active_id:
-            try:
-                await async_sync_plan_to_household(
-                    self.hass,
-                    entry_id=self.entry.entry_id,
-                    household_entry_id=household_entry_id,
-                    person_id=active_id,
-                    week_offset=effective_week_offset,
-                )
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception(
-                    "Auto-sync to Household Chores failed for entry_id=%s household_entry_id=%s person_id=%s",
-                    self.entry.entry_id,
-                    household_entry_id,
-                    active_id,
-                )
+        await self.async_maybe_sync_household(person_id=active_id, week_start=week_start_day.isoformat())
         # Nudge entity UI to refresh options/overrides when generation happens.
         try:
             from homeassistant.helpers.dispatcher import async_dispatcher_send

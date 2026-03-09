@@ -18,6 +18,14 @@ from .ws_state import public_state
 from .storage import ConflictError
 
 
+async def _maybe_sync_after_mutation(coordinator, *, person_id: str, week_start: str) -> None:
+    try:
+        await coordinator.async_maybe_sync_household(person_id=person_id, week_start=week_start)
+    except Exception:
+        # coordinator handles its own logging; keep websocket path clean
+        pass
+
+
 def _runtime_payload() -> dict[str, Any]:
     """Compute UI runtime values (week start + week number + today) with 01:00 rollover."""
     now = dt_util.as_local(dt_util.utcnow())
@@ -166,6 +174,7 @@ async def ws_set_workout_completed(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -201,6 +210,7 @@ async def ws_delete_workout(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -238,6 +248,7 @@ async def ws_delete_workout_series(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["start_week_start"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -270,6 +281,7 @@ async def ws_delete_cycle(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -635,6 +647,10 @@ async def ws_generate_cycle(
         connection.send_error(msg["id"], "conflict", str(e))
         return
 
+    # Sync the whole touched span of weeks after cycle generation.
+    for w in range(weeks):
+        wk = (start_week_start + timedelta(days=(w * 7))).isoformat()
+        await _maybe_sync_after_mutation(coordinator, person_id=person_id, week_start=wk)
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state or {}, runtime=_runtime_payload())})
 
 
@@ -672,6 +688,7 @@ async def ws_upsert_workout(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
