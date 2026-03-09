@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.23";
+const CARD_VERSION = "0.3.24";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -2834,7 +2834,6 @@ class WeeklyTrainingCard extends HTMLElement {
 			                ${selectedWorkout ? `
 			                  <button class="pillbtn" id="edit-workout" title="Edit workout" ${saving ? "disabled" : ""}><ha-icon icon="mdi:pencil"></ha-icon></button>
 			                  <button class="pillbtn danger" id="delete-workout" title="Delete workout" ${saving ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
-			                  <button class="pillbtn" id="copy-workout" title="Copy workout (Markdown)" ${saving ? "disabled" : ""}><ha-icon icon="mdi:content-copy"></ha-icon></button>
 			                ` : ``}
 			              </div>
 			              </div>
@@ -3159,6 +3158,15 @@ class WeeklyTrainingCard extends HTMLElement {
 	    const qCyclePlan = this.shadowRoot ? this.shadowRoot.querySelector("#cycle-plan") : null;
 	    if (qCyclePlan) qCyclePlan.addEventListener("click", () => { this._planCycle(); });
 
+        const qEditWorkoutBtn = this.shadowRoot ? this.shadowRoot.querySelector("#edit-workout") : null;
+        const qDeleteWorkoutBtn = this.shadowRoot ? this.shadowRoot.querySelector("#delete-workout") : null;
+        if (selectedWorkout) {
+          const pid = String(viewPersonId || this._activePersonId() || "");
+          const wk = String(weekStartIso || "").slice(0, 10);
+          if (qEditWorkoutBtn) qEditWorkoutBtn.addEventListener("click", () => { this._openEditWorkoutModal(pid, wk, selectedWorkout); });
+          if (qDeleteWorkoutBtn) qDeleteWorkoutBtn.addEventListener("click", () => { this._openDeleteChoiceForWorkout(pid, wk, selectedWorkout); });
+        }
+
 		    // Swipe actions on the generated workout (tablet-first).
 		    const swipeZone = this.shadowRoot ? this.shadowRoot.querySelector("#swipe-zone") : null;
 			    if (swipeZone && selectedWorkout) {
@@ -3209,16 +3217,6 @@ class WeeklyTrainingCard extends HTMLElement {
 	            this._ui.swipeY = Number(t.clientY) || 0;
 			    }
 
-		    const qCopyWorkout = this.shadowRoot ? this.shadowRoot.querySelector("#copy-workout") : null;
-		    const qEditWorkoutBtn = this.shadowRoot ? this.shadowRoot.querySelector("#edit-workout") : null;
-		    const qDeleteWorkoutBtn = this.shadowRoot ? this.shadowRoot.querySelector("#delete-workout") : null;
-		    if (selectedWorkout) {
-		      const pid = String(viewPersonId || this._activePersonId() || "");
-		      const wk = String(weekStartIso || "").slice(0, 10);
-		      if (qCopyWorkout) qCopyWorkout.addEventListener("click", () => { this._copySelectedWorkoutMarkdown(pid, wk, selectedWorkout); });
-		      if (qEditWorkoutBtn) qEditWorkoutBtn.addEventListener("click", () => { this._openEditWorkoutModal(pid, wk, selectedWorkout); });
-		      if (qDeleteWorkoutBtn) qDeleteWorkoutBtn.addEventListener("click", () => { this._openDeleteChoiceForWorkout(pid, wk, selectedWorkout); });
-		    }
 	        } catch (_) {}
 	      }, { passive: true });
 	      swipeZone.addEventListener("touchmove", (e) => {

@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.24 - 2026-03-09
+
+- Fix web workout action buttons so Edit/Delete handlers bind in the correct render path.
+- Remove the copy button from the selected workout action row.
+- Keep desktop workout management focused on visible actions instead of hidden gestures.
+
 ## 0.3.23 - 2026-03-09
 
 - Add visible Edit/Delete actions for the selected workout in the web UI.
