@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.19 - 2026-03-09
+
+- Add backend service `weekly_training.sync_to_household_chores`.
+- Sync generated workouts for one person/week into Household Chores using stable task IDs.
+- Replace prior synced Weekly Training tasks for the same person/week to avoid duplicates.
+
 ## 0.3.16 - 2026-02-15
 
 - UI: "Planned" badge is now only shown as a placeholder when a day has no workouts (workout markers are enough).
