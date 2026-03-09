@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.22";
+const CARD_VERSION = "0.3.23";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -2399,6 +2399,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	          white-space: nowrap;
 	        }
 	        .swipehint { margin-top: 8px; font-size: 12px; color: var(--wt-text2); }
+        .pillbtn.danger { color: var(--error-color, #ef4444); }
 
 	        .completedbar {
 	          margin-top: 14px;
@@ -2830,11 +2831,15 @@ class WeeklyTrainingCard extends HTMLElement {
 		                </div>
 			              <div class="pillwrap">
 			                <div class="pill">${selectedWorkout ? "Workout" : "Empty"}</div>
-			                ${selectedWorkout ? `<button class="pillbtn" id="copy-workout" title="Copy workout (Markdown)" ${saving ? "disabled" : ""}><ha-icon icon="mdi:content-copy"></ha-icon></button>` : ``}
+			                ${selectedWorkout ? `
+			                  <button class="pillbtn" id="edit-workout" title="Edit workout" ${saving ? "disabled" : ""}><ha-icon icon="mdi:pencil"></ha-icon></button>
+			                  <button class="pillbtn danger" id="delete-workout" title="Delete workout" ${saving ? "disabled" : ""}><ha-icon icon="mdi:trash-can-outline"></ha-icon></button>
+			                  <button class="pillbtn" id="copy-workout" title="Copy workout (Markdown)" ${saving ? "disabled" : ""}><ha-icon icon="mdi:content-copy"></ha-icon></button>
+			                ` : ``}
 			              </div>
 			              </div>
 			              ${selectedWorkout ? `
-			                <div class="swipehint">Swipe right: completed. Swipe left: delete.</div>
+			                <div class="swipehint">Swipe on touch devices. On web, use Edit/Delete buttons.</div>
 			                <div class="items swipable" id="swipe-zone">
 			                  <div class="swipe-bg" id="swipe-bg" aria-hidden="true">
 			                    <div class="swipe-bubble" id="swipe-bubble"></div>
@@ -3205,10 +3210,14 @@ class WeeklyTrainingCard extends HTMLElement {
 			    }
 
 		    const qCopyWorkout = this.shadowRoot ? this.shadowRoot.querySelector("#copy-workout") : null;
-		    if (qCopyWorkout && selectedWorkout) {
+		    const qEditWorkoutBtn = this.shadowRoot ? this.shadowRoot.querySelector("#edit-workout") : null;
+		    const qDeleteWorkoutBtn = this.shadowRoot ? this.shadowRoot.querySelector("#delete-workout") : null;
+		    if (selectedWorkout) {
 		      const pid = String(viewPersonId || this._activePersonId() || "");
 		      const wk = String(weekStartIso || "").slice(0, 10);
-		      qCopyWorkout.addEventListener("click", () => { this._copySelectedWorkoutMarkdown(pid, wk, selectedWorkout); });
+		      if (qCopyWorkout) qCopyWorkout.addEventListener("click", () => { this._copySelectedWorkoutMarkdown(pid, wk, selectedWorkout); });
+		      if (qEditWorkoutBtn) qEditWorkoutBtn.addEventListener("click", () => { this._openEditWorkoutModal(pid, wk, selectedWorkout); });
+		      if (qDeleteWorkoutBtn) qDeleteWorkoutBtn.addEventListener("click", () => { this._openDeleteChoiceForWorkout(pid, wk, selectedWorkout); });
 		    }
 	        } catch (_) {}
 	      }, { passive: true });

@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.23 - 2026-03-09
+
+- Add visible Edit/Delete actions for the selected workout in the web UI.
+- Keep touch gestures as an optional shortcut instead of the only way to manage workouts.
+- Improve desktop usability so workout management no longer depends on long-press/swipe interactions.
+
 ## 0.3.22 - 2026-03-09
 
 - Extend Household Chores auto-sync to additional plan mutation flows: complete, delete, upsert, and cycle generation.
