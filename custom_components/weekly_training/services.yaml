@@ -215,3 +215,40 @@ delete_person:
       required: true
       selector:
         text:
+
+sync_to_household_chores:
+  name: Sync to Household Chores
+  description: Sync one person's generated weekly workouts into Household Chores as tasks.
+  fields:
+    entry_id:
+      name: Weekly Training entry ID
+      required: true
+      selector:
+        text:
+    household_entry_id:
+      name: Household Chores entry ID
+      required: true
+      selector:
+        text:
+    person_id:
+      name: Person ID
+      required: true
+      selector:
+        text:
+    week_offset:
+      name: Week offset
+      description: 0 = current week, 1 = next week, -1 = previous week.
+      required: false
+      default: 0
+      selector:
+        number:
+          min: -1
+          max: 3
+          mode: box
+    overwrite_titles:
+      name: Overwrite titles
+      description: Reserved for future title customization behavior.
+      required: false
+      default: false
+      selector:
+        boolean:
