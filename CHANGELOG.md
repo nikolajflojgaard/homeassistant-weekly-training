@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.21 - 2026-03-09
+
+- Fix single-workout generation to pass selected weekday and week offset explicitly from the card UI.
+- Add regression tests for weekday-to-date mapping and same-date replacement behavior.
+- Reduce reliance on persisted override state for one-off workout generation.
+
 ## 0.3.20 - 2026-03-09
 
 - Add optional auto-sync to Household Chores after workout generation.

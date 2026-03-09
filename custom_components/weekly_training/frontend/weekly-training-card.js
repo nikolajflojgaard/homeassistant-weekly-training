@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.19";
+const CARD_VERSION = "0.3.21";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
@@ -1096,7 +1096,7 @@ class WeeklyTrainingCard extends HTMLElement {
     }
   }
 
-  async _generate(personId) {
+  async _generate(personId, weekdayOverride = null, weekOffsetOverride = null) {
     this._captureFocus();
     this._saving = true;
     this._error = "";
@@ -1105,7 +1105,10 @@ class WeeklyTrainingCard extends HTMLElement {
       // Persist draft first so generation uses latest values
       await this._saveOverrides();
       const pid = personId ? String(personId) : "";
-      await this._callWS({ type: "weekly_training/generate_plan", entry_id: this._entryId, ...(pid ? { person_id: pid } : {}) });
+      const payload = { type: "weekly_training/generate_plan", entry_id: this._entryId, ...(pid ? { person_id: pid } : {}) };
+      if (weekdayOverride != null && Number.isFinite(Number(weekdayOverride))) payload.weekday = Number(weekdayOverride);
+      if (weekOffsetOverride != null && Number.isFinite(Number(weekOffsetOverride))) payload.week_offset = Number(weekOffsetOverride);
+      await this._callWS(payload);
       // Refresh state after generation
       const st = await this._callWS({ type: "weekly_training/get_state", entry_id: this._entryId });
       this._applyState((st && st.state) || this._state);
@@ -3084,7 +3087,7 @@ class WeeklyTrainingCard extends HTMLElement {
 	      if (pid) {
 	        await this._setActivePerson(pid);
 	      }
-	      await this._generate(pid);
+	      await this._generate(pid, d, this._weekOffset);
 	    });
 
 	    // Cycle planner modal

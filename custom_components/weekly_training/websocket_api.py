@@ -512,6 +512,8 @@ async def ws_get_plan(
         vol.Required("type"): "weekly_training/generate_plan",
         vol.Required("entry_id"): str,
         vol.Optional("person_id"): str,
+        vol.Optional("week_offset"): vol.Coerce(int),
+        vol.Optional("weekday"): vol.Coerce(int),
         vol.Optional("expected_rev"): vol.Coerce(int),
     }
 )
@@ -530,7 +532,12 @@ async def ws_generate_plan(
     if person_id is not None:
         person_id = str(person_id)
     try:
-        state = await coordinator.async_generate_for_day(person_id=person_id, expected_rev=msg.get("expected_rev"))
+        state = await coordinator.async_generate_for_day(
+            person_id=person_id,
+            week_offset=int(msg["week_offset"]) if msg.get("week_offset") is not None else None,
+            weekday=int(msg["weekday"]) if msg.get("weekday") is not None else None,
+            expected_rev=msg.get("expected_rev"),
+        )
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
