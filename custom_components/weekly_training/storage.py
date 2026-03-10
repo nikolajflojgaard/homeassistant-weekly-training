@@ -1156,19 +1156,25 @@ class WeeklyTrainingStore:
         """Insert or replace a workout (used for undo restore/import)."""
         state = await self.async_load()
         self._assert_rev(state, expected_rev)
-        plan = self.get_plan(state, person_id=str(person_id), week_start=str(week_start)) or {}
+        date_iso = str((workout or {}).get("date") or "").strip()
+        if not date_iso:
+            return state
+        try:
+            d = date.fromisoformat(date_iso)
+            target_week_start = (d - timedelta(days=d.weekday())).isoformat()
+        except Exception:
+            target_week_start = str(week_start)
+
+        plan = self.get_plan(state, person_id=str(person_id), week_start=str(target_week_start)) or {}
         if not isinstance(plan, dict):
             plan = {}
         workouts = plan.get("workouts")
         if not isinstance(workouts, list):
             workouts = []
-        date_iso = str((workout or {}).get("date") or "").strip()
-        if not date_iso:
-            return state
         workouts = [w for w in workouts if not (isinstance(w, dict) and str(w.get("date") or "") == date_iso)]
         workouts.append(dict(workout or {}))
         plan["workouts"] = workouts
-        return await self.async_save_plan(person_id=str(person_id), week_start=str(week_start), plan=plan)
+        return await self.async_save_plan(person_id=str(person_id), week_start=str(target_week_start), plan=plan)
 
     def get_plan(self, state: dict[str, Any], *, person_id: str, week_start: str) -> dict[str, Any] | None:
         plans = state.get("plans") if isinstance(state, dict) else None

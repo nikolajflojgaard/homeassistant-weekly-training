@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.26 - 2026-03-10
+
+- Fix workout upserts to store the workout in the week derived from its actual date instead of trusting client-provided week context.
+- This improves auto-sync reliability for newly created workouts, especially on iPad/mobile flows.
+
 ## 0.3.25 - 2026-03-10
 
 - Harden Household Chores auto-sync after workout mutations by syncing both the requested week and the week derived from the workout date when relevant.
