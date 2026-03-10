@@ -8,7 +8,7 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
-from datetime import timedelta
+from datetime import date, timedelta
 
 from homeassistant.util import dt as dt_util
 
@@ -18,9 +18,32 @@ from .ws_state import public_state
 from .storage import ConflictError
 
 
-async def _maybe_sync_after_mutation(coordinator, *, person_id: str, week_start: str) -> None:
+def _monday_for_date(date_iso: str) -> str | None:
     try:
-        await coordinator.async_maybe_sync_household(person_id=person_id, week_start=week_start)
+        d = date.fromisoformat(str(date_iso))
+    except Exception:
+        return None
+    return (d - timedelta(days=d.weekday())).isoformat()
+
+
+async def _maybe_sync_after_mutation(coordinator, *, person_id: str, week_start: str | None = None, date_iso: str | None = None) -> None:
+    try:
+        touched: list[str] = []
+        if week_start:
+            touched.append(str(week_start))
+        if date_iso:
+            monday = _monday_for_date(str(date_iso))
+            if monday:
+                touched.append(monday)
+        # preserve order, remove dupes
+        seen = set()
+        unique = []
+        for wk in touched:
+            if wk and wk not in seen:
+                seen.add(wk)
+                unique.append(wk)
+        for wk in unique:
+            await coordinator.async_maybe_sync_household(person_id=person_id, week_start=wk)
     except Exception:
         # coordinator handles its own logging; keep websocket path clean
         pass
@@ -174,7 +197,7 @@ async def ws_set_workout_completed(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
-    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]), date_iso=str(msg["date"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -210,7 +233,7 @@ async def ws_delete_workout(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
-    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
+    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]), date_iso=str(msg["date"]))
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 
@@ -688,7 +711,12 @@ async def ws_upsert_workout(
     except ConflictError as e:
         connection.send_error(msg["id"], "conflict", str(e))
         return
-    await _maybe_sync_after_mutation(coordinator, person_id=str(msg["person_id"]), week_start=str(msg["week_start"]))
+    await _maybe_sync_after_mutation(
+        coordinator,
+        person_id=str(msg["person_id"]),
+        week_start=str(msg["week_start"]),
+        date_iso=str(workout.get("date") or ""),
+    )
     await coordinator.async_request_refresh()
     connection.send_result(msg["id"], {"entry_id": entry_id, "state": public_state(state, runtime=_runtime_payload())})
 

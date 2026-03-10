@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.25 - 2026-03-10
+
+- Harden Household Chores auto-sync after workout mutations by syncing both the requested week and the week derived from the workout date when relevant.
+- Improve reliability for add/edit/delete flows where client week context may be stale or inconsistent.
+
 ## 0.3.24 - 2026-03-09
 
 - Fix web workout action buttons so Edit/Delete handlers bind in the correct render path.

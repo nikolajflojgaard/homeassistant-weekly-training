@@ -5,7 +5,7 @@
  * - Persist to backend only on explicit Save (or Generate).
  */
 
-const CARD_VERSION = "0.3.24";
+const CARD_VERSION = "0.3.25";
 
 class WeeklyTrainingCard extends HTMLElement {
   static getConfigElement() {
