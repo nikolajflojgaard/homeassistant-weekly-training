@@ -1,0 +1,15 @@
+docs_dir: docs
+service_name: homeassistant-weekly-training
+owner: Nikolaj Flojgaard
+strict: true
+required_diagrams:
+  - context.mmd
+  - container-or-flow.mmd
+  - critical-sequence.mmd
+  - data-flow.mmd
+  - deployment.mmd
+exclude:
+  - .git
+  - docs/generated
+  - .pycache
+  - __pycache__

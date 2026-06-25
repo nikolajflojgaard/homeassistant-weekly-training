@@ -1,0 +1,11 @@
+sequenceDiagram
+  participant Consumer
+  participant Interface
+  participant Application
+  participant Dependency
+
+  Consumer->>Interface: Request or command
+  Interface->>Application: Validate and dispatch
+  Application->>Dependency: Read/write/call
+  Dependency-->>Application: Result
+  Application-->>Consumer: Response or side effect

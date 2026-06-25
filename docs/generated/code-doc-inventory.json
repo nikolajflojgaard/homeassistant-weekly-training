@@ -1,0 +1,490 @@
+{
+  "counts": {
+    "deployments": 0,
+    "entrypoints": 0,
+    "files": 58,
+    "flows": 0,
+    "frameworks": 0,
+    "interfaces": 1,
+    "manifests": 2,
+    "routes": 0
+  },
+  "deployments": [],
+  "entrypoints": [],
+  "files": [
+    {
+      "path": ".gitignore",
+      "size": 89,
+      "suffix": "",
+      "tags": []
+    },
+    {
+      "path": "CHANGELOG.md",
+      "size": 13460,
+      "suffix": ".md",
+      "tags": []
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "size": 310,
+      "suffix": ".md",
+      "tags": []
+    },
+    {
+      "path": "LICENSE",
+      "size": 1057,
+      "suffix": "",
+      "tags": []
+    },
+    {
+      "path": "Makefile",
+      "size": 157,
+      "suffix": "",
+      "tags": [
+        "manifest"
+      ]
+    },
+    {
+      "path": "README.md",
+      "size": 4108,
+      "suffix": ".md",
+      "tags": []
+    },
+    {
+      "path": "SECURITY.md",
+      "size": 176,
+      "suffix": ".md",
+      "tags": []
+    },
+    {
+      "path": "code-docs.yml",
+      "size": 287,
+      "suffix": ".yml",
+      "tags": []
+    },
+    {
+      "path": "dark_icon.png",
+      "size": 4677,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "dark_logo.png",
+      "size": 4680,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "hacs.json",
+      "size": 158,
+      "suffix": ".json",
+      "tags": []
+    },
+    {
+      "path": "icon.png",
+      "size": 4575,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "logo.png",
+      "size": 4566,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "pyproject.toml",
+      "size": 127,
+      "suffix": ".toml",
+      "tags": [
+        "manifest"
+      ]
+    },
+    {
+      "path": "requirements-dev.txt",
+      "size": 73,
+      "suffix": ".txt",
+      "tags": []
+    },
+    {
+      "path": ".devcontainer/devcontainer.json",
+      "size": 407,
+      "suffix": ".json",
+      "tags": []
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "size": 131,
+      "suffix": ".md",
+      "tags": []
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "size": 119,
+      "suffix": ".yml",
+      "tags": []
+    },
+    {
+      "path": ".github/release-drafter.yml",
+      "size": 475,
+      "suffix": ".yml",
+      "tags": []
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "size": 370,
+      "suffix": ".yml",
+      "tags": []
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "size": 244,
+      "suffix": ".yml",
+      "tags": []
+    },
+    {
+      "path": ".github/workflows/code-docs.yml",
+      "size": 583,
+      "suffix": ".yml",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/__init__.py",
+      "size": 3885,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/button.py",
+      "size": 1435,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/config_flow.py",
+      "size": 2869,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/const.py",
+      "size": 933,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/coordinator.py",
+      "size": 8400,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/dark_icon.png",
+      "size": 4677,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/dark_logo.png",
+      "size": 4680,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/diagnostics.py",
+      "size": 1733,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/entity.py",
+      "size": 495,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/frontend.py",
+      "size": 684,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/icon.png",
+      "size": 4575,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/library.py",
+      "size": 740,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/logo.png",
+      "size": 4566,
+      "suffix": ".png",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/manifest.json",
+      "size": 483,
+      "suffix": ".json",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/number.py",
+      "size": 3052,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/planner.py",
+      "size": 34937,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/select.py",
+      "size": 10014,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/sensor.py",
+      "size": 3879,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/services.py",
+      "size": 14770,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/services.yaml",
+      "size": 5173,
+      "suffix": ".yaml",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/storage.py",
+      "size": 49186,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/strings.json",
+      "size": 1098,
+      "suffix": ".json",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/text.py",
+      "size": 2794,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/version.py",
+      "size": 442,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/websocket_api.py",
+      "size": 32562,
+      "suffix": ".py",
+      "tags": [
+        "interface"
+      ]
+    },
+    {
+      "path": "custom_components/weekly_training/ws_state.py",
+      "size": 835,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/data/exercises.json",
+      "size": 4557,
+      "suffix": ".json",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/frontend/weekly-training-card.js",
+      "size": 174951,
+      "suffix": ".js",
+      "tags": []
+    },
+    {
+      "path": "custom_components/weekly_training/translations/en.json",
+      "size": 1098,
+      "suffix": ".json",
+      "tags": []
+    },
+    {
+      "path": "scripts/bump_version.py",
+      "size": 854,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "scripts/enable_ci.sh",
+      "size": 394,
+      "suffix": ".sh",
+      "tags": []
+    },
+    {
+      "path": "scripts/release.sh",
+      "size": 380,
+      "suffix": ".sh",
+      "tags": []
+    },
+    {
+      "path": "scripts/rename_domain.py",
+      "size": 3510,
+      "suffix": ".py",
+      "tags": []
+    },
+    {
+      "path": "scripts/validate.sh",
+      "size": 1489,
+      "suffix": ".sh",
+      "tags": []
+    },
+    {
+      "path": "tests/test_planner_cycle_splits.py",
+      "size": 4402,
+      "suffix": ".py",
+      "tags": [
+        "test"
+      ]
+    },
+    {
+      "path": "tests/test_planner_weekday_mapping.py",
+      "size": 3013,
+      "suffix": ".py",
+      "tags": [
+        "test"
+      ]
+    }
+  ],
+  "flows": [],
+  "frameworks": [],
+  "interfaces": [
+    {
+      "path": "custom_components/weekly_training/websocket_api.py",
+      "size": 32562,
+      "suffix": ".py",
+      "tags": [
+        "interface"
+      ]
+    }
+  ],
+  "manifests": [
+    {
+      "path": "Makefile",
+      "size": 157,
+      "suffix": "",
+      "tags": [
+        "manifest"
+      ]
+    },
+    {
+      "path": "pyproject.toml",
+      "size": 127,
+      "suffix": ".toml",
+      "tags": [
+        "manifest"
+      ]
+    }
+  ],
+  "repo": "homeassistant-weekly-training",
+  "root": ".",
+  "routes": [],
+  "tree": {
+    ".devcontainer": {
+      "devcontainer.json": null
+    },
+    ".github": {
+      "ISSUE_TEMPLATE": {
+        "bug_report.yml": null,
+        "feature_request.yml": null
+      },
+      "PULL_REQUEST_TEMPLATE.md": null,
+      "dependabot.yml": null,
+      "release-drafter.yml": null,
+      "workflows": {
+        "code-docs.yml": null
+      }
+    },
+    ".gitignore": null,
+    "CHANGELOG.md": null,
+    "CONTRIBUTING.md": null,
+    "LICENSE": null,
+    "Makefile": null,
+    "README.md": null,
+    "SECURITY.md": null,
+    "code-docs.yml": null,
+    "custom_components": {
+      "weekly_training": {
+        "__init__.py": null,
+        "button.py": null,
+        "config_flow.py": null,
+        "const.py": null,
+        "coordinator.py": null,
+        "dark_icon.png": null,
+        "dark_logo.png": null,
+        "data": {
+          "exercises.json": null
+        },
+        "diagnostics.py": null,
+        "entity.py": null,
+        "frontend": {
+          "weekly-training-card.js": null
+        },
+        "frontend.py": null,
+        "icon.png": null,
+        "library.py": null,
+        "logo.png": null,
+        "manifest.json": null,
+        "number.py": null,
+        "planner.py": null,
+        "select.py": null,
+        "sensor.py": null,
+        "services.py": null,
+        "services.yaml": null,
+        "storage.py": null,
+        "strings.json": null,
+        "text.py": null,
+        "translations": {
+          "en.json": null
+        },
+        "version.py": null,
+        "websocket_api.py": null,
+        "ws_state.py": null
+      }
+    },
+    "dark_icon.png": null,
+    "dark_logo.png": null,
+    "hacs.json": null,
+    "icon.png": null,
+    "logo.png": null,
+    "pyproject.toml": null,
+    "requirements-dev.txt": null,
+    "scripts": {
+      "bump_version.py": null,
+      "enable_ci.sh": null,
+      "release.sh": null,
+      "rename_domain.py": null,
+      "validate.sh": null
+    },
+    "tests": {
+      "test_planner_cycle_splits.py": null,
+      "test_planner_weekday_mapping.py": null
+    }
+  },
+  "truncated": false
+}

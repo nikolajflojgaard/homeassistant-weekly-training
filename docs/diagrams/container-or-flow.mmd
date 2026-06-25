@@ -1,0 +1,8 @@
+flowchart TB
+  Repo[homeassistant-weekly-training repository]
+  Manifests[Build and dependency manifests]
+  Repo -->|defines| Manifests
+  Interfaces[Interfaces and routes]
+  Repo -->|exposes| Interfaces
+  Docs[Generated documentation]
+  Repo -->|documents| Docs
