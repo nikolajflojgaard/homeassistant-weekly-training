@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 - (none)
 
+## 0.3.27 - 2026-07-29
+
+- Household Chores sync now writes source metadata (`source`, `source_id`, `source_kind`) and date-backed tasks so downstream dashboards/briefs can identify synced workouts reliably.
+
 ## 0.3.26 - 2026-03-10
 
 - Fix workout upserts to store the workout in the week derived from its actual date instead of trusting client-provided week context.

@@ -115,7 +115,10 @@ async def async_sync_plan_to_household(
             continue
         task_id = str(task.get("id") or "")
         same_week = str(task.get("week_start") or "") == week_start
-        is_synced = task_id.startswith(prefix)
+        is_synced = task_id.startswith(prefix) or (
+            str(task.get("source") or "") == "weekly_training"
+            and str(task.get("source_id") or "").startswith(f"{entry_id}:{person_id}:")
+        )
         if same_week and is_synced:
             continue
         kept_tasks.append(task)
@@ -143,7 +146,7 @@ async def async_sync_plan_to_household(
             "column": column,
             "order": len(by_column.get(column, [])),
             "created_at": str(workout.get("generated_at") or plan.get("generated_at") or ""),
-            "end_date": None,
+            "end_date": date_iso,
             "template_id": None,
             "fixed": False,
             "span_id": None,
@@ -151,6 +154,10 @@ async def async_sync_plan_to_household(
             "span_total": 0,
             "week_start": week_start,
             "week_number": plan.get("week_number"),
+            "source": "weekly_training",
+            "source_id": f"{entry_id}:{person_id}:{date_iso}",
+            "source_kind": "workout",
+            "completed_at": None,
         }
         kept_tasks.append(task)
         by_column.setdefault(column, []).append(task)

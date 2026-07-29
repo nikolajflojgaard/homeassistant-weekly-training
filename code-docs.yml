@@ -1,5 +1,4 @@
 docs_dir: docs
-repository_name: homeassistant-weekly-training
 service_name: homeassistant-weekly-training
 owner: Nikolaj Flojgaard
 strict: true

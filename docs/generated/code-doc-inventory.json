@@ -20,7 +20,7 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size": 13460,
+      "size": 13668,
       "suffix": ".md",
       "tags": []
     },
@@ -58,7 +58,7 @@
     },
     {
       "path": "code-docs.yml",
-      "size": 334,
+      "size": 287,
       "suffix": ".yml",
       "tags": []
     },
@@ -258,7 +258,7 @@
     },
     {
       "path": "custom_components/weekly_training/services.py",
-      "size": 14770,
+      "size": 15116,
       "suffix": ".py",
       "tags": []
     },
